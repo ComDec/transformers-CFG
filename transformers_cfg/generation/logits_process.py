@@ -11,25 +11,102 @@ from transformers.generation.logits_process import (
     LOGITS_PROCESSOR_INPUTS_DOCSTRING,
 )
 from transformers.utils import add_start_docstrings
+from transformers import PreTrainedTokenizer
 
 from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
 from transformers_cfg.token_grammar_recognizer import AbsTokenRecognizer
+from transformers_cfg.recognizer import StringRecognizer
 
 logger = logging.getLogger(__name__)
 
+class GrammarLimitedOneTimeLogitsProcessor(LogitsProcessor):
+    def __init__(self, parsed_grammar, tokenizer: PreTrainedTokenizer, device: Optional[torch.device] = None, nice_token_ids_list: Optional[torch.tensor] = None) -> None:
+        self.device = device
+        self.tokenizer = tokenizer
+        self.nice_token_ids_list = nice_token_ids_list
+        self.string_grammar = StringRecognizer(
+        parsed_grammar.grammar_encoding, parsed_grammar.symbol_table["root"]
+    )
+        
+    def mask_logits(self, input_ids: torch.LongTensor, logits: torch.FloatTensor, device: torch.device, ignore_length: int = 0) -> torch.FloatTensor:
+        masked_logits = logits.clone()
+        # logits: 1,L,D
+        acceptance = torch.zeros((logits.shape[0], len(self.tokenizer)), dtype=torch.bool, device=device)
+        
+        # by default, the prompt part and eos is acceptable
+        acceptance[:ignore_length - 1, :] = True
+        acceptance[:, self.tokenizer.eos_token_id] = True
+            
+        decoded_token_list = [self.tokenizer.decode(token_id) for token_id in input_ids.tolist()]
+        
+        # parse start token
+        for token in self.nice_token_ids_list:
+            if self.string_grammar._accept_prefix(self.tokenizer.decode(token)):
+                acceptance[ignore_length - 1, token] = True
+        
+        for i in range(ignore_length, len(input_ids)):
+            if self.string_grammar._accept_prefix(",".join(decoded_token_list[ignore_length:i+1]) + ","):
+                acceptance[i, input_ids[i]] = True
+                for token in self.nice_token_ids_list:
+                    if self.string_grammar._accept_string(",".join(decoded_token_list[ignore_length:i+1]) + "," + self.tokenizer.decode([token]) + ","):
+                        acceptance[i, token] = True
+            else:
+                acceptance[i:, input_ids[i]] = False
+                break
+        
+
+        # if the logits size of the model is more than the tokennizer vocab
+        # we artificially expand the acceptance tensor and block everything
+        # beyond the tokenizer vocab size
+        acceptance_vocab_size = acceptance.shape[-1]
+        masked_logits_vocab_size = masked_logits.shape[-1]
+        if masked_logits_vocab_size != acceptance_vocab_size:
+            assert (
+                acceptance_vocab_size < masked_logits_vocab_size
+            ), "impossible for tokenizer vocab to be less than model vocab"
+            vocab_size_diff = masked_logits_vocab_size - acceptance_vocab_size
+            false_tensor = torch.zeros(
+                (*acceptance.shape[:-1], vocab_size_diff),
+                dtype=torch.bool,
+                device=device,
+            )
+            acceptance = torch.cat((acceptance, false_tensor), dim=-1)
+
+        # Logits to -inf where False
+        masked_logits[~acceptance] = -math.inf
+        return masked_logits
+        
+    def process_logits(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, ignore_length: int = 0) -> torch.FloatTensor:
+        """
+        :param input_ids:
+        :param scores:
+        :return:
+        """
+        if self.device is None:
+            device = scores.device
+            
+        masked_scores = self.mask_logits(input_ids, scores, device, ignore_length)
+        return masked_scores
+    
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, ignore_length: int = 0
+    ) -> torch.FloatTensor:
+        return self.process_logits(input_ids, scores, ignore_length)
+    
+    
 
 class GrammarConstrainedLogitsProcessor(LogitsProcessor):
-    def __init__(self, grammar_constraint: AbsTokenRecognizer, valid_token_start_idx: Optional[int] = None, execution_mode: Literal["speculation", "full_mask"] = "speculation", device: Optional[torch.device] = None) -> None:
+    def __init__(self, grammar_constraint: AbsTokenRecognizer, valid_token_start_idx: Optional[int] = None, execution_mode: Literal["speculation", "full_mask"] = "speculation", device: Optional[torch.device] = None, nice_vocab_list: Optional[torch.tensor] = None) -> None:
         self.last_size = None
         self.grammar_constraint = grammar_constraint
         self.batch_parsing_states = None
         self.valid_token_start_idx = valid_token_start_idx
         self.execution_mode = execution_mode
+        self.nice_vocab_list = nice_vocab_list
         self.device = device
 
     def mask_logits(self, logits: torch.FloatTensor, device: torch.device) -> torch.FloatTensor:
         masked_logits = logits.clone()
-        
         if self.execution_mode == "speculation":
             # try to accept the most likely token
             acceptance = torch.zeros((logits.shape[0], len(self.grammar_constraint.homomorphism)), dtype=torch.bool, device=device)
@@ -48,6 +125,10 @@ class GrammarConstrainedLogitsProcessor(LogitsProcessor):
                     acceptance[i] = self.grammar_constraint.filter_vocab(
                         self.batch_parsing_states[i], device
                     )
+        elif self.execution_mode == "limited":
+            # try to accept tokens from a given vocab list
+            assert self.nice_vocab_list is not None, "You selected the limited mode, must give a nice_vocab_list"
+            pass
         else:
             acceptance = self.grammar_constraint.batch_filter_vocab(self.batch_parsing_states, device)
 

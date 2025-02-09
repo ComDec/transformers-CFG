@@ -13,7 +13,7 @@ def parse_args():
     parser.add_argument(
         "--model-id",
         type=str,
-        default="/dlabdata1/llm_hub/Mistral-7B-v0.1",
+        default="openai-community/gpt2",
         help="Model ID",
     )
     parser.add_argument("--device", type=str, help="Device to put the model on")
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     string_grammar = StringRecognizer(
         parsed_grammar.grammar_encoding, parsed_grammar.symbol_table["root"]
     )
-
+    import ipdb; ipdb.set_trace()
     res = tokenizer.decode(
         constrained_output[0],
         skip_special_tokens=True,
