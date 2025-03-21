@@ -1,7 +1,9 @@
 from unittest import TestCase
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers_cfg.token_grammar_recognizer import IncrementalTokenRecognizer
+
 from transformers_cfg.generation.logits_process import GrammarConstrainedLogitsProcessor
+from transformers_cfg.token_grammar_recognizer import IncrementalTokenRecognizer
 
 MODEL_IDS = [
     "hf-internal-testing/tiny-random-GPTJForCausalLM",

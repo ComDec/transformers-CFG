@@ -1,7 +1,8 @@
+from dataclasses import dataclass
 from unittest import TestCase
+
 from transformers_cfg.parser import parse_ebnf
 from transformers_cfg.recognizer import StringRecognizer
-from dataclasses import dataclass
 
 
 @dataclass
@@ -46,9 +47,7 @@ valid_depot_sentences = [
         "drive_and_lift",
         "(drive-and-lift truck0 hoist0 crate0 pallet0 distributor0)",
     ),
-    PDDLTestCase(
-        "lift_and_drive", "(lift-and-drive truck0 hoist0 crate0 pallet0 depot0 depot1)"
-    ),
+    PDDLTestCase("lift_and_drive", "(lift-and-drive truck0 hoist0 crate0 pallet0 depot0 depot1)"),
     PDDLTestCase(
         "multiple_actions",
         "(lift-and-drive truck0 hoist0 crate0 pallet0 depot0 depot0) (lift hoist2 crate2 crate1 distributor1)",
@@ -78,9 +77,7 @@ valid_depot_sentences = [
 valid_depot_prefixes = [
     PDDLTestCase("empty_string", ""),
     PDDLTestCase("one_action_spaced", "(load hoist0 crate0 truck0 distributor0) "),
-    PDDLTestCase(
-        "r_unbalanced_paranthesis", "(unload hoist2 crate5 truck1 distributor0"
-    ),
+    PDDLTestCase("r_unbalanced_paranthesis", "(unload hoist2 crate5 truck1 distributor0"),
 ]
 
 invalid_depot_sentences = [
@@ -115,19 +112,13 @@ valid_satellite_sentences = [
 valid_satellite_prefixes = [
     PDDLTestCase("empty_string", ""),
     PDDLTestCase("one_action_spaced", "(switch-off instrument2 satellite3) "),
-    PDDLTestCase(
-        "r_unbalanced_paranthesis", "(calibrate satellite1 instrument2 direction4"
-    ),
+    PDDLTestCase("r_unbalanced_paranthesis", "(calibrate satellite1 instrument2 direction4"),
 ]
 
 invalid_satellite_sentences = [
     PDDLTestCase("undefined_object", "(switch-on instrument8 satellite3)"),
-    PDDLTestCase(
-        "wrong_number_of_arguments", "(take-image satellite1 instrument2 mode1)"
-    ),
-    PDDLTestCase(
-        "l_unbalanced_paranthesis", "(calibrate satellite1 instrument2 direction4))"
-    ),
+    PDDLTestCase("wrong_number_of_arguments", "(take-image satellite1 instrument2 mode1)"),
+    PDDLTestCase("l_unbalanced_paranthesis", "(calibrate satellite1 instrument2 direction4))"),
     PDDLTestCase("unexisitng_operator", "(turn satellite1 direction4 direction0)"),
     PDDLTestCase("empty_paranthesis", "()"),
 ]
@@ -171,7 +162,7 @@ class Test_parsing_pddl_object(TestCase):
     def setUp(self):
         self.recognizers = {}
         for grammar_name in TestCases:
-            with open(f"examples/grammars/PDDL/{grammar_name}.ebnf", "r") as file:
+            with open(f"examples/grammars/PDDL/{grammar_name}.ebnf") as file:
                 input_text = file.read()
 
             parsed_grammar = parse_ebnf(input_text)

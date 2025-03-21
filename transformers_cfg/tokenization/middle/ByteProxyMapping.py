@@ -1,16 +1,13 @@
-from transformers import AutoTokenizer
-
-
 from typing import Dict, List
+
+from transformers import AutoTokenizer
 
 
 class ByteProxyMapping:
     def __init__(self, tokenizer):
         # check if the tokenizer is fast, if so, convert it to slow
         if tokenizer.is_fast:
-            tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer.name_or_path, use_fast=False
-            )
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer.name_or_path, use_fast=False)
         self.tokenizer = tokenizer
 
         # if tokenizer doesn't have byte_encoder(which is the case for llama-3), use gpt2_tokenizer
@@ -23,9 +20,7 @@ class ByteProxyMapping:
         self.proxychar2byte: Dict[str, int] = tokenizer.byte_decoder
 
         # code point to byte
-        self.cdp2byte: Dict[int, int] = {
-            ord(c): b for c, b in self.proxychar2byte.items()
-        }
+        self.cdp2byte: Dict[int, int] = {ord(c): b for c, b in self.proxychar2byte.items()}
         self.byte2cdp: Dict[int, int] = {v: k for k, v in self.cdp2byte.items()}
         self.PROXY_CDP_SET = set(self.cdp2byte.keys())
         # [33, 126] and [161,172, [174, 323], in total 94 + 12 + 150 = 256(N.B. 173 is a control character)
@@ -40,9 +35,7 @@ class ByteProxyMapping:
         return byte_int
 
     def decode_proxytoken2bytes(self, proxy_token: str) -> bytes:
-        bytes_seq: List[int] = [
-            self.decode_proxychar2byte_cdp(ord(c)) for c in proxy_token
-        ]
+        bytes_seq: List[int] = [self.decode_proxychar2byte_cdp(ord(c)) for c in proxy_token]
         return bytes(bytes_seq)
 
     def map(self, proxy_token: str) -> bytes:
@@ -72,7 +65,6 @@ class LLAMAByteProxyMapper:
 
 
 if __name__ == "__main__":
-
     gpt2_tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
     # gpt2_tokenizer.encode("´")

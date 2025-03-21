@@ -1,9 +1,8 @@
 from unittest import TestCase
 
+from tests.json_utils import is_json_parsable
 from transformers_cfg.parser import parse_ebnf
 from transformers_cfg.recognizer import StringRecognizer
-from tests.json_utils import is_json_parsable
-
 
 json_examples = {
     # Simple Nested Object
@@ -31,16 +30,13 @@ json_examples = {
 
 class Test_parsing_json_object(TestCase):
     def setUp(self):
-
-        with open("examples/grammars/json.ebnf", "r") as file:
+        with open("examples/grammars/json.ebnf") as file:
             input_text = file.read()
         parsed_grammar = parse_ebnf(input_text)
 
         start_rule_id = parsed_grammar.symbol_table["root"]
 
-        self.recognizer = StringRecognizer(
-            parsed_grammar.grammar_encoding, start_rule_id
-        )
+        self.recognizer = StringRecognizer(parsed_grammar.grammar_encoding, start_rule_id)
 
     def test_minimal_json_object(self):
         """
@@ -64,7 +60,6 @@ class Test_parsing_json_object(TestCase):
         self.assertFalse(self.recognizer._accept_string(prefix_json))
 
     def test_systematic_examples(self):
-
         for name, json_object in json_examples.items():
             # parsing_state = AcceptState.empty_state()
             self.assertEqual(

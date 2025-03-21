@@ -1,9 +1,12 @@
 from unittest import TestCase
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers_cfg.token_grammar_recognizer import IncrementalTokenRecognizer
-from transformers_cfg.token_grammar_recognizer import AbsTokenRecognizer
-from transformers_cfg.generation.logits_process import GrammarConstrainedLogitsProcessor
 
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from transformers_cfg.generation.logits_process import GrammarConstrainedLogitsProcessor
+from transformers_cfg.token_grammar_recognizer import (
+    AbsTokenRecognizer,
+    IncrementalTokenRecognizer,
+)
 
 UNICODE_MODEL_IDS = [
     "JackFram/llama-68m",

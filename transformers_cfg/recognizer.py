@@ -1,16 +1,15 @@
 import logging
 from functools import lru_cache
-from typing import List, Tuple, Set, Optional
+from typing import List, Optional, Set, Tuple
 
 from transformers_cfg.parser import (
-    END_OF_RULE_MARKER,
     END_OF_ALTERNATE_MARKER,
-    parse_ebnf,
+    END_OF_RULE_MARKER,
     REF_RULE_MARKER,
+    parse_ebnf,
 )
 from transformers_cfg.utf8_utils import PartialUTF8, decode_utf8
 from transformers_cfg.utils import intervals_intersect
-import logging
 
 
 class AcceptState:
@@ -96,7 +95,6 @@ class StringRecognizer:
         return rule_offsets
 
     def init_stack(self, start_rule_id: int) -> Set[Tuple[int]]:
-
         stacks = set()
         # Loop over alternates of start rule to build initial stacks
         sub_rhs_offset = self.rule_offsets[start_rule_id] + 1
@@ -147,10 +145,7 @@ class StringRecognizer:
                 new_stack = list(stack[:-1])
                 # if the rule ref is followed by another element, we add it to the stack
                 next_element_offset = cur_element_offset + 2
-                if (
-                    self.grammar_encoding[next_element_offset]
-                    != END_OF_ALTERNATE_MARKER
-                ):
+                if self.grammar_encoding[next_element_offset] != END_OF_ALTERNATE_MARKER:
                     new_stack.append(next_element_offset)
 
                 # if the referenced rule is not empty, we add its element offset to the stack
@@ -163,9 +158,7 @@ class StringRecognizer:
 
             return new_stacks
 
-    def _update_state_with_byte(
-        self, byte: int, parsing_state: AcceptState
-    ) -> AcceptState:
+    def _update_state_with_byte(self, byte: int, parsing_state: AcceptState) -> AcceptState:
         # suppose we have code point 一, ord('一') = 19968, we need to match 3 bytes
         # we need to match 3 bytes, so we need to call _consume_byte_partial_match 3 times
         return self._update_state_with_bytes(bytes([byte]), parsing_state)
@@ -186,15 +179,10 @@ class StringRecognizer:
             byte_seq = bytes(byte_seq)
         code_points, new_partial_utf8 = decode_utf8(byte_seq, partial_utf8)
         if verbose:
-            logging.debug(
-                f"code_points: {code_points}; new_partial_utf8: {new_partial_utf8}"
-            )
-        new_stacks = self._update_state_with_code_points_for_all_stacks(
-            code_points, stacks
-        )
+            logging.debug(f"code_points: {code_points}; new_partial_utf8: {new_partial_utf8}")
+        new_stacks = self._update_state_with_code_points_for_all_stacks(code_points, stacks)
 
         for stack in new_stacks:
-
             # stack is empty, meaning that the variables are all consumed
             if len(stack) == 0:
                 return True
@@ -217,12 +205,8 @@ class StringRecognizer:
             byte_seq = bytes(byte_seq)
         code_points, new_partial_utf8 = decode_utf8(byte_seq, partial_utf8)
         if verbose:
-            logging.debug(
-                f"code_points: {code_points}; new_partial_utf8: {new_partial_utf8}"
-            )
-        new_stacks = self._update_state_with_code_points_for_all_stacks(
-            code_points, stacks
-        )
+            logging.debug(f"code_points: {code_points}; new_partial_utf8: {new_partial_utf8}")
+        new_stacks = self._update_state_with_code_points_for_all_stacks(code_points, stacks)
 
         new_new_stacks = set()
         for stack in new_stacks:
@@ -304,9 +288,7 @@ class StringRecognizer:
         for i, code_point in enumerate(code_points):
             # for lru_cache to work, we need to convert the list of stacks into a tuple of stacks
             tuple_stacks: Tuple[Tuple[int], ...] = tuple(stacks)
-            stacks = self._update_state_with_code_point_for_all_stacks(
-                code_point, tuple_stacks
-            )
+            stacks = self._update_state_with_code_point_for_all_stacks(code_point, tuple_stacks)
             if len(stacks) > 0 and verbose:
                 accepted_code_point = code_points[: i + 1]
                 corresponding_char = chr(code_point)
@@ -318,15 +300,11 @@ class StringRecognizer:
     def _accept_code_points(
         self, code_points: List[int], stacks: Set[Tuple[int]], verbose=False
     ) -> bool:
-        stacks = self._update_state_with_code_points_for_all_stacks(
-            code_points, stacks, verbose
-        )
+        stacks = self._update_state_with_code_points_for_all_stacks(code_points, stacks, verbose)
         return len(stacks) > 0
 
     @lru_cache(maxsize=30000)
-    def accept_code_point_at_element(
-        self, code_point: int, element_offset: int
-    ) -> bool:
+    def accept_code_point_at_element(self, code_point: int, element_offset: int) -> bool:
         size = self.grammar_encoding[element_offset]
         # to make idx point to the range_start of the first range
         element_offset += 1
@@ -416,9 +394,7 @@ class StringRecognizer:
         if parsing_state is None:
             parsing_state = self.get_initial_parsing_state()
         new_parsing_state = self._update_state_with_string(string, parsing_state)
-        at_least_one_stack_is_empty = any(
-            len(stack) == 0 for stack in new_parsing_state.stacks
-        )
+        at_least_one_stack_is_empty = any(len(stack) == 0 for stack in new_parsing_state.stacks)
         return at_least_one_stack_is_empty
 
     #############################
@@ -460,7 +436,7 @@ GrammarRecognizer = StringRecognizer
 if __name__ == "__main__":
     # set logging level
 
-    with open("examples/grammars/japanese.ebnf", "r") as file:
+    with open("examples/grammars/japanese.ebnf") as file:
         input_text = file.read()
     parsed_grammar = parse_ebnf(input_text)
     logging.debug(f"symbol_ids: \n{parsed_grammar.symbol_table}")

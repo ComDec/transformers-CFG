@@ -8,7 +8,6 @@ from tests.test_accept_token_sequence._test_accept_tokens_mixin import (
 
 
 class BartTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = BartTokenizerFast
     pretrained_name = "facebook/bart-large"
 

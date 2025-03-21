@@ -1,18 +1,20 @@
-from transformers_cfg.tokenization.SUPPORTED_TOKENIZERS import SUPPORTED_TOKENIZERS
-from .ByteProxyMapping import ByteProxyMapping, LLAMAByteProxyMapper
 import logging
+
 from transformers import (
-    GPT2TokenizerFast,
     BartTokenizerFast,
-    T5TokenizerFast,
     CodeGenTokenizerFast,
+    GemmaTokenizerFast,
+    GPT2TokenizerFast,
     LlamaTokenizerFast,
     PreTrainedTokenizerFast,
-    GemmaTokenizerFast,
-    Qwen2TokenizerFast
+    Qwen2TokenizerFast,
+    T5TokenizerFast,
 )
 
+from transformers_cfg.tokenization.SUPPORTED_TOKENIZERS import SUPPORTED_TOKENIZERS
 from transformers_cfg.tokenization.utils import get_tokenizer_charset
+
+from .ByteProxyMapping import ByteProxyMapping, LLAMAByteProxyMapper
 
 log = logging.getLogger(__name__)
 
@@ -37,7 +39,8 @@ class TokenizerMiddleMapping:
             type(hf_tokenizer) in SUPPORTED_TOKENIZERS
         ), f"Tokenizer not supported: {hf_tokenizer.__class__.__name__}, supported tokenizers: {SUPPORTED_TOKENIZERS}"
         if isinstance(
-            hf_tokenizer, (GPT2TokenizerFast, BartTokenizerFast, CodeGenTokenizerFast, Qwen2TokenizerFast)
+            hf_tokenizer,
+            (GPT2TokenizerFast, BartTokenizerFast, CodeGenTokenizerFast, Qwen2TokenizerFast),
         ):
             return GPT2TokenizerMiddleMapping(hf_tokenizer)
         elif isinstance(hf_tokenizer, (LlamaTokenizerFast, GemmaTokenizerFast)):
@@ -48,9 +51,10 @@ class TokenizerMiddleMapping:
             return LLAMA1TokenizerMiddleMapping(hf_tokenizer)
         elif isinstance(hf_tokenizer, T5TokenizerFast):
             return T5TokenizerMiddleMapping(hf_tokenizer)
-        elif isinstance(
-            hf_tokenizer, PreTrainedTokenizerFast
-        ) and 'Meta-Llama-3' in hf_tokenizer.name_or_path:
+        elif (
+            isinstance(hf_tokenizer, PreTrainedTokenizerFast)
+            and "Meta-Llama-3" in hf_tokenizer.name_or_path
+        ):
             return GPT2TokenizerMiddleMapping(hf_tokenizer)
 
     @staticmethod

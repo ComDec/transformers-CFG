@@ -1,8 +1,8 @@
+from dataclasses import dataclass
 from unittest import TestCase
 
 from transformers_cfg.parser import parse_ebnf
 from transformers_cfg.recognizer import StringRecognizer
-from dataclasses import dataclass
 
 
 @dataclass
@@ -63,9 +63,7 @@ valid_isocyanite_sentences = [
     MoleculeTestCase("trans_bond_left", "O=C=N\\C1CC(C\\N=C=O)(CC(C1)(C)C)C"),
     MoleculeTestCase("trans_bond", "O=C=N\\CCCCCC/N=C=O"),
     MoleculeTestCase("group_radicals", "CCOC(C(N=C=O)CCCCN=C=O)=O"),
-    MoleculeTestCase(
-        "simple_atom", "O=C=NC1=CC=CC(CC2=CC=C(C=C2N=C=O)CC3=CC=C(C=C3)N=C=O)=C1"
-    ),
+    MoleculeTestCase("simple_atom", "O=C=NC1=CC=CC(CC2=CC=C(C=C2N=C=O)CC3=CC=C(C=C3)N=C=O)=C1"),
     MoleculeTestCase(
         "single_bond_no_hyphen",
         "O=C=NC1=CC(CC2=C(C=C(C=C2)CC3=CC=C(C=C3N=C=O)CC4=CC=C(C=C4)N=C=O)N=C=O)=CC=C1",
@@ -105,9 +103,7 @@ valid_acrylate_sentences = [
     MoleculeTestCase("", "C=CC(=O)OCC(CO)(COC(=O)C=C)COC(=O)C=C"),
     MoleculeTestCase("", "CCC(COCCCOC(=O)C=C)(COCCCOC(=O)C=C)COCCCOC(=O)C=C"),
     MoleculeTestCase("", "CCC(COCC(CC)(COC(=O)C=C)COC(=O)C=C)(COC(=O)C=C)COC(=O)C=C"),
-    MoleculeTestCase(
-        "", "C=CC(=O)OCC(CO)(COCC(COC(=O)C=C)(COC(=O)C=C)COC(=O)C=C)COC(=O)C=C"
-    ),
+    MoleculeTestCase("", "C=CC(=O)OCC(CO)(COCC(COC(=O)C=C)(COC(=O)C=C)COC(=O)C=C)COC(=O)C=C"),
     MoleculeTestCase(
         "", "C=CC(=O)OCC(COCC(COC(=O)C=C)(COC(=O)C=C)COC(=O)C=C)(COC(=O)C=C)COC(=O)C=C"
     ),
@@ -154,7 +150,7 @@ class Test_parsing_smiles_object(TestCase):
     def setUp(self):
         self.recognizers = {}
         for grammar_name in TestCases:
-            with open(f"examples/grammars/SMILES/{grammar_name}.ebnf", "r") as file:
+            with open(f"examples/grammars/SMILES/{grammar_name}.ebnf") as file:
                 input_text = file.read()
             parsed_grammar = parse_ebnf(input_text)
 

@@ -1,10 +1,12 @@
-import torch
 import argparse
+
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
-from transformers_cfg.recognizer import StringRecognizer
+
 from transformers_cfg.generation.logits_process import GrammarConstrainedLogitsProcessor
+from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
 from transformers_cfg.parser import parse_ebnf
+from transformers_cfg.recognizer import StringRecognizer
 
 
 def parse_args():
@@ -38,9 +40,7 @@ def main():
     model_id = args.model_id
 
     # Detect if GPU is available, otherwise use CPU
-    device = torch.device(
-        args.device or ("cuda" if torch.cuda.is_available() else "cpu")
-    )
+    device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
     print(f"Using device: {device}")
 
     # Load model and tokenizer
@@ -50,7 +50,7 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
 
     # Load grammar
-    with open(f"examples/grammars/PDDL/{args.pddl_type}.ebnf", "r") as file:
+    with open(f"examples/grammars/PDDL/{args.pddl_type}.ebnf") as file:
         grammar_str = file.read()
 
     parsed_grammar = parse_ebnf(grammar_str)
@@ -64,9 +64,9 @@ def main():
         + f"1. {one_shot_prompts[pddl_domain]}\n2. "
     ]
 
-    input_ids = tokenizer(
-        prompts, add_special_tokens=False, return_tensors="pt", padding=True
-    )["input_ids"].to(
+    input_ids = tokenizer(prompts, add_special_tokens=False, return_tensors="pt", padding=True)[
+        "input_ids"
+    ].to(
         device
     )  # Move input_ids to the same device as model
 

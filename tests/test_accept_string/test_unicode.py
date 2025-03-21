@@ -1,8 +1,7 @@
 from unittest import TestCase
 
-from transformers_cfg.recognizer import StringRecognizer
-
 from transformers_cfg.parser import parse_ebnf
+from transformers_cfg.recognizer import StringRecognizer
 
 
 class TestUnicode(TestCase):
@@ -12,7 +11,7 @@ class TestUnicode(TestCase):
         """
 
         japanese = "こんにちは世界"
-        with open("examples/grammars/japanese.ebnf", "r") as file:
+        with open("examples/grammars/japanese.ebnf") as file:
             input_text = file.read()
         parsed_grammar = parse_ebnf(input_text)
 
@@ -28,7 +27,7 @@ class TestUnicode(TestCase):
         """
 
         emoji = "😀😄😂"
-        with open("examples/grammars/emoji.ebnf", "r") as file:
+        with open("examples/grammars/emoji.ebnf") as file:
             input_text = file.read()
         parsed_grammar = parse_ebnf(input_text)
 

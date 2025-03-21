@@ -1,7 +1,9 @@
 from unittest import TestCase
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers_cfg.token_grammar_recognizer import IncrementalTokenRecognizer
+
 from transformers_cfg.generation.logits_process import GrammarConstrainedLogitsProcessor
+from transformers_cfg.token_grammar_recognizer import IncrementalTokenRecognizer
 
 MODEL_IDS = [
     "JackFram/llama-68m",
@@ -30,9 +32,7 @@ class TestGreedyDecoding(TestCase):
             cls.tokenizers[model_id] = AutoTokenizer.from_pretrained(model_id)
             cls.tokenizers[model_id].pad_token = cls.tokenizers[model_id].eos_token
             # we expand the embedding layer to simulate the case where the model has a larger embedding layer than the tokenizer
-            cls.models[model_id].resize_token_embeddings(
-                10 + len(cls.tokenizers[model_id])
-            )
+            cls.models[model_id].resize_token_embeddings(10 + len(cls.tokenizers[model_id]))
 
     def test_generate_only_number(self):
         # test greedy decoding with grammar constraints

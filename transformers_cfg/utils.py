@@ -41,9 +41,7 @@ def pprint_token_ids(tokenizer, token_ids=None, text=None):
         token_ids = tokenizer.encode(text, add_special_tokens=False)
     special_token_ids = tokenizer.all_special_ids
     special_tokens = tokenizer.all_special_tokens
-    special_id2token = {
-        id: token for id, token in zip(special_token_ids, special_tokens)
-    }
+    special_id2token = {id: token for id, token in zip(special_token_ids, special_tokens)}
     # loop over token_ids and color the special tokens
     colored_token_ids = []
 
@@ -88,8 +86,7 @@ def get_tokenizer_model_type(model: str = "gpt2"):
             tokenizer_json["pre_tokenizer"]["type"] == "ByteLevel"
             or (
                 "pretokenizers" in tokenizer_json["pre_tokenizer"]
-                and tokenizer_json["pre_tokenizer"]["pretokenizers"][1]["type"]
-                == "ByteLevel"
+                and tokenizer_json["pre_tokenizer"]["pretokenizers"][1]["type"] == "ByteLevel"
             )
         )
     ):

@@ -1,15 +1,13 @@
-import unittest
-import subprocess
-import os
 import glob
+import os
+import subprocess
+import unittest
 
 
 class TestExampleScripts(unittest.TestCase):
     def run_script(self, path_to_script):
         """Utility method to run a script using subprocess and assert that it exits with a 0 status code."""
-        result = subprocess.run(
-            ["python", path_to_script], capture_output=True, text=True
-        )
+        result = subprocess.run(["python", path_to_script], capture_output=True, text=True)
         self.assertEqual(
             result.returncode,
             0,

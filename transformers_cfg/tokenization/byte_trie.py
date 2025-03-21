@@ -1,8 +1,8 @@
 import logging
-from functools import lru_cache
-from typing import Dict, List, Set, Tuple, Optional
 from collections import deque
 from dataclasses import dataclass
+from functools import lru_cache
+from typing import Dict, List, Optional, Set, Tuple
 
 from transformers_cfg.tokenization.middle.TokenizerMiddleMapping import (
     TokenizerMiddleMapping,
@@ -55,9 +55,7 @@ class ByteTrie:
         mapping = TokenizerMiddleMapping.from_hf_tokenizer(tokenizer)
         TCFG_tokenizer = TCFG_Tokenizer.from_hf_tokenizer(tokenizer)
 
-        token_ids_to_ignore: Set[
-            int
-        ] = TCFG_tokenizer.get_special_token_ids_to_excluded()
+        token_ids_to_ignore: Set[int] = TCFG_tokenizer.get_special_token_ids_to_excluded()
         for token_id in range(TCFG_tokenizer.real_vocab_size()):
             if token_id not in token_ids_to_ignore:
                 byte_repr = mapping.map(token_id)
@@ -76,9 +74,7 @@ class ByteTrie:
         _dfs(self.root, [], result, accept, counter)
         return result
 
-    def bfs(
-        self, predicate=lambda x: True, verbose=False
-    ) -> List[Tuple[List[int], int]]:
+    def bfs(self, predicate=lambda x: True, verbose=False) -> List[Tuple[List[int], int]]:
         queue = deque([(self.root, [])])
         valid_byte_seqs: List[Tuple[List[int], int]] = []
         counter = {"visited": 0, "pruned": 0}

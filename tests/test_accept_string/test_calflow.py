@@ -1,8 +1,8 @@
+from dataclasses import dataclass
 from unittest import TestCase
 
 from transformers_cfg.parser import parse_ebnf
 from transformers_cfg.recognizer import StringRecognizer
-from dataclasses import dataclass
 
 
 @dataclass
@@ -17,9 +17,7 @@ valid_cal_flow_sentences = [
         "empty_struct_constraint",
         "(Yield (CreateCommitEventWrapper (CreatePreflightEventWrapper (^(Event) EmptyStructConstraint))))",
     ),
-    CalFlowTestCase(
-        "find_reports", "(Yield (FindReports (toRecipient (CurrentUser))))"
-    ),
+    CalFlowTestCase("find_reports", "(Yield (FindReports (toRecipient (CurrentUser))))"),
     CalFlowTestCase(
         "long_entry",
         '(Yield (CreateCommitEventWrapper (CreatePreflightEventWrapper (& (& (Event.subject_? (?= "Work Shift")) (Event.start_? (?= (DateAtTimeWithDefaults (MDY 2L (April) (Year.apply 2019L)) (NumberAM 8L))))) (Event.end_? (DateTime.time_? (?= (NumberPM 4L))))))))',
@@ -152,9 +150,7 @@ valid_cal_flow_sentences = [
 
 valid_cal_flow_prefixes = [
     CalFlowTestCase("empty_string", ""),
-    CalFlowTestCase(
-        "unbalanced_paranthesis", "(Yield (FindReports (toRecipient (CurrentUser)))"
-    ),
+    CalFlowTestCase("unbalanced_paranthesis", "(Yield (FindReports (toRecipient (CurrentUser)))"),
 ]
 
 invalid_cal_flow_sentences = [
@@ -172,17 +168,14 @@ invalid_cal_flow_sentences = [
 
 class Test_parsing_cal_flow_object(TestCase):
     def setUp(self):
-        with open(f"examples/grammars/calflow.ebnf", "r") as file:
+        with open(f"examples/grammars/calflow.ebnf") as file:
             input_text = file.read()
         parsed_grammar = parse_ebnf(input_text)
         start_rule_id = parsed_grammar.symbol_table["root"]
-        self.recognizer = StringRecognizer(
-            parsed_grammar.grammar_encoding, start_rule_id
-        )
+        self.recognizer = StringRecognizer(parsed_grammar.grammar_encoding, start_rule_id)
         print("SetUp successfull!", flush=True)
 
     def test_valid_sentence(self):
-
         for cal_flow_test_case in valid_cal_flow_sentences:
             self.assertEqual(
                 True,

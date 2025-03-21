@@ -1,9 +1,10 @@
-import torch
 import argparse
-from transformers import pipeline
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
+
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+
 from transformers_cfg.generation.logits_process import GrammarConstrainedLogitsProcessor
+from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
 
 
 def parse_args():
@@ -25,9 +26,7 @@ def main():
     model_id = args.model_id
 
     # Detect if GPU is available, otherwise use CPU
-    device = torch.device(
-        args.device or ("cuda" if torch.cuda.is_available() else "cpu")
-    )
+    device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
     print(f"Using device: {device}")
 
     # Load model and tokenizer
@@ -37,7 +36,7 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
 
     # Load grammar
-    with open(f"examples/grammars/json.ebnf", "r") as file:
+    with open(f"examples/grammars/json.ebnf") as file:
         grammar_str = file.read()
 
     grammar = IncrementalGrammarConstraint(grammar_str, "root", tokenizer)

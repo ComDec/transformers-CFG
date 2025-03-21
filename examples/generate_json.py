@@ -1,11 +1,10 @@
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
-from transformers_cfg.generation.logits_process import GrammarConstrainedLogitsProcessor
 
+from transformers_cfg.generation.logits_process import GrammarConstrainedLogitsProcessor
+from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
 
 if __name__ == "__main__":
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
@@ -21,7 +20,7 @@ if __name__ == "__main__":
     model.generation_config.pad_token_id = model.generation_config.eos_token_id
 
     # Load grammar
-    with open("examples/grammars/json.ebnf", "r") as file:
+    with open("examples/grammars/json.ebnf") as file:
         grammar_str = file.read()
     grammar = IncrementalGrammarConstraint(grammar_str, "root", tokenizer)
     grammar_processor = GrammarConstrainedLogitsProcessor(grammar)

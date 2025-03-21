@@ -1,9 +1,8 @@
 import warnings
 
 from transformers import PreTrainedTokenizer
+
 from transformers_cfg.token_grammar_recognizer import IncrementalTokenRecognizer
-
-
 from transformers_cfg.utils import pprint_token_ids
 
 
@@ -37,7 +36,7 @@ class TokenizerTesterMixin:
 
     def test_json_parsable(self):
         # Test that we can load a JSON object
-        with open("examples/grammars/json.ebnf", "r") as file:
+        with open("examples/grammars/json.ebnf") as file:
             input_text = file.read()
         JsontokenRecognizer = IncrementalTokenRecognizer(
             grammar_str=input_text, start_rule_name="root", tokenizer=self.tokenizer
@@ -50,9 +49,7 @@ class TokenizerTesterMixin:
         # check if there is unk token
         for token_id in token_ids:
             if token_id == self.tokenizer.unk_token_id:
-                warnings.warn(
-                    f"unk token found in input_token_ids: {token_ids}, skipping test"
-                )
+                warnings.warn(f"unk token found in input_token_ids: {token_ids}, skipping test")
                 return
 
         acc_state = JsontokenRecognizer._update_state_with_single_token_seq(
@@ -66,7 +63,7 @@ class TokenizerTesterMixin:
 
     def test_balanced_parentheses(self):
         # Test that we can recognize a balanced parentheses
-        with open("examples/grammars/balanced_parentheses.ebnf", "r") as file:
+        with open("examples/grammars/balanced_parentheses.ebnf") as file:
             input_text = file.read()
         recognizer = IncrementalTokenRecognizer(
             grammar_str=input_text, start_rule_name="root", tokenizer=self.tokenizer
@@ -79,13 +76,9 @@ class TokenizerTesterMixin:
         # check if there is unk token
         for token_id in token_ids:
             if token_id == self.tokenizer.unk_token_id:
-                warnings.warn(
-                    f"unk token found in input_token_ids: {token_ids}, skipping test"
-                )
+                warnings.warn(f"unk token found in input_token_ids: {token_ids}, skipping test")
                 return
-        parsing_state = recognizer._update_state_with_single_token_seq(
-            token_ids, as_string=False
-        )
+        parsing_state = recognizer._update_state_with_single_token_seq(token_ids, as_string=False)
         # the json object is complete, so the stacks should be empty
         self.assertTrue(
             parsing_state.stacks == set() or parsing_state.stacks == set(tuple()),
@@ -93,7 +86,6 @@ class TokenizerTesterMixin:
         )
 
     def test_forcing_sequence(self):
-
         string_to_force = "12345 678 90"
 
         grammar_str = f"""
@@ -111,14 +103,10 @@ class TokenizerTesterMixin:
         # check if there is unk token
         for token_id in token_ids:
             if token_id == self.tokenizer.unk_token_id:
-                warnings.warn(
-                    f"unk token found in input_token_ids: {token_ids}, skipping test"
-                )
+                warnings.warn(f"unk token found in input_token_ids: {token_ids}, skipping test")
                 return
 
-        acc_state = tokenRecognizer._update_state_with_single_token_seq(
-            token_ids, as_string=False
-        )
+        acc_state = tokenRecognizer._update_state_with_single_token_seq(token_ids, as_string=False)
         # the json object is complete, so the stacks should be empty
         self.assertTrue(
             acc_state.stacks == set() or acc_state.stacks == set(tuple()),
@@ -130,7 +118,7 @@ class TokenizerTesterMixin:
         Test that we can accept emoji
         """
 
-        with open("examples/grammars/emoji.ebnf", "r") as file:
+        with open("examples/grammars/emoji.ebnf") as file:
             input_text = file.read()
 
         tokenRecognizer = IncrementalTokenRecognizer(
@@ -144,9 +132,7 @@ class TokenizerTesterMixin:
         # check if there is unk token
         for token_id in token_ids:
             if token_id == self.tokenizer.unk_token_id:
-                warnings.warn(
-                    f"unk token found in input_token_ids: {token_ids}, skipping test"
-                )
+                warnings.warn(f"unk token found in input_token_ids: {token_ids}, skipping test")
                 return
 
         accpetance = tokenRecognizer.accept_token_ids(token_ids, as_string=False)

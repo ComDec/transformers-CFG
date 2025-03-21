@@ -2,6 +2,7 @@ import math
 from unittest import TestCase
 
 import torch
+
 from transformers_cfg.metrics.metrics import (
     ConstrainedDecodingMetric,
     ConstrainedDecodingMetricOutput,
@@ -55,18 +56,12 @@ class TestConstrainedDecodingMetric(TestCase):
         # The output sequence is [0, 1]
         # we know that the token 0 at step 1 has an equal logit, so the probability is 0.5
         # same for token 1 at step 2
-        self.assertTrue(
-            torch.equal(result.original_token_probs, torch.tensor([[0.5, 0.5]]))
-        )
+        self.assertTrue(torch.equal(result.original_token_probs, torch.tensor([[0.5, 0.5]])))
         # as the constrained decoding rejects the second token in step 1 and the first token in step 2
         # the probability of the selected token is 1.0 in both steps
-        self.assertTrue(
-            torch.equal(result.renormalised_token_probs, torch.tensor([[1.0, 1.0]]))
-        )
+        self.assertTrue(torch.equal(result.renormalised_token_probs, torch.tensor([[1.0, 1.0]])))
         # the rejection probability gain is 0.5 for both steps
-        self.assertTrue(
-            torch.equal(result.total_rejection_prob_gain, torch.tensor([[0.5, 0.5]]))
-        )
+        self.assertTrue(torch.equal(result.total_rejection_prob_gain, torch.tensor([[0.5, 0.5]])))
         # the rejection entropy gain is simply -log_2(0.5) = 1.0 for both steps
         self.assertTrue(
             torch.equal(result.total_rejection_entropy_gain, torch.tensor([[1.0, 1.0]]))

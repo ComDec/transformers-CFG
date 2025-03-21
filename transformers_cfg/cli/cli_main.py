@@ -2,11 +2,13 @@
 
 import argparse
 from importlib import import_module
-from transformers_cfg.tokenization.utils import is_tokenizer_supported
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
-from transformers_cfg.generation.logits_process import GrammarConstrainedLogitsProcessor
+
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+from transformers_cfg.generation.logits_process import GrammarConstrainedLogitsProcessor
+from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
+from transformers_cfg.tokenization.utils import is_tokenizer_supported
 
 
 def parse_arguments(args=None):
@@ -15,9 +17,7 @@ def parse_arguments(args=None):
 
     # Sub-command: check
     check_parser = subparsers.add_parser("check", help="Check if a model is supported")
-    check_parser.add_argument(
-        "model", type=str, help="The unique model name on HF hub."
-    )
+    check_parser.add_argument("model", type=str, help="The unique model name on HF hub.")
 
     # Sub-command: generate
     generate_parser = subparsers.add_parser(
@@ -113,7 +113,7 @@ def generate_text(args):
     tokenizer.pad_token = tokenizer.eos_token
 
     # Load grammar
-    with open(args.grammar_file_path, "r") as file:
+    with open(args.grammar_file_path) as file:
         grammar_str = file.read()
     grammar = IncrementalGrammarConstraint(grammar_str, "root", tokenizer)
     grammar_processor = GrammarConstrainedLogitsProcessor(grammar)
@@ -125,9 +125,9 @@ def generate_text(args):
             raise ImportError(
                 "You need to install mlx to use MLX. Install it with `pip install 'git+https://github.com/nathanrchn/mlx-examples.git@logits_processor#subdirectory=llms'`."
             )
-        
-        import numpy as np
+
         import mlx.core as mx
+        import numpy as np
         from mlx_lm import load, stream_generate
 
         model, _ = load(args.model_id)
@@ -162,7 +162,7 @@ def generate_text(args):
             prompt=args.prompt,
             max_tokens=args.max_new_tokens,
             repetition_penalty=args.repetition_penalty,
-            logits_processor=logits_processor
+            logits_processor=logits_processor,
         )
 
         # print prompt first in color
@@ -207,9 +207,7 @@ def generate_text(args):
     # set special tokens in generation config
     model.generation_config.pad_token_id = tokenizer.pad_token_id
 
-    inputs = tokenizer(
-        args.prompt, add_special_tokens=False, return_tensors="pt", padding=True
-    )
+    inputs = tokenizer(args.prompt, add_special_tokens=False, return_tensors="pt", padding=True)
     input_ids = inputs["input_ids"].to(args.device)
     attention_mask = inputs["attention_mask"].to(args.device)
 
@@ -227,9 +225,7 @@ def generate_text(args):
     # remove prefix from the output
     constrained_output = constrained_output[:, len(input_ids[0]) :]
 
-    constrained_generations = tokenizer.batch_decode(
-        constrained_output, skip_special_tokens=True
-    )
+    constrained_generations = tokenizer.batch_decode(constrained_output, skip_special_tokens=True)
 
     # print prompt first in color
     print("\033[92m" + "Prompt:" + args.prompt + "\033[0m")

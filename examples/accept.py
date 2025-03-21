@@ -8,8 +8,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 def main(args):
-
-    with open(args.grammar_file_path, "r") as file:
+    with open(args.grammar_file_path) as file:
         grammar_str = file.read()
     parsed_grammar = parse_ebnf(grammar_str)
     start_rule_id = parsed_grammar.symbol_table["root"]
@@ -24,9 +23,7 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Generate text with grammar constraints."
-    )
+    parser = argparse.ArgumentParser(description="Generate text with grammar constraints.")
     parser.add_argument(
         "-g",
         "--grammar_file_path",

@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from typing import Tuple
 
-from dataclasses import dataclass
-
 
 @dataclass
 class PartialUTF8:
@@ -36,14 +34,12 @@ class PartialUTF8:
         return self.value == other.value and self.n_remain == other.n_remain
 
 
-from typing import List, Tuple
 from functools import lru_cache
+from typing import List, Tuple
 
 
 @lru_cache(maxsize=3000000)
-def decode_utf8(
-    src: bytes, partial_start: PartialUTF8
-) -> Tuple[List[int], PartialUTF8]:
+def decode_utf8(src: bytes, partial_start: PartialUTF8) -> Tuple[List[int], PartialUTF8]:
     # Lookup table for determining the total bytes based on the first byte's high 4 bits
     lookup = [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 2, 2, 3, 4]
     pos = 0  # Position in the src bytes to start decoding from
@@ -156,9 +152,7 @@ if __name__ == "__main__":
     # Example usage with the entire string
     code_points = decode_utf8_string(utf8_bytes)
 
-    print(
-        f"Code Points: {code_points}"
-    )  # Expected Output: [8364, 72, 101, 108, 108, 111]
+    print(f"Code Points: {code_points}")  # Expected Output: [8364, 72, 101, 108, 108, 111]
 
     print("-" * 50)
 

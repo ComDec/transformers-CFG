@@ -1,8 +1,8 @@
+from dataclasses import dataclass
 from unittest import TestCase
 
 from transformers_cfg.parser import parse_ebnf
 from transformers_cfg.recognizer import StringRecognizer
-from dataclasses import dataclass
 
 
 @dataclass
@@ -12,9 +12,7 @@ class OvernightTestCase:
 
 
 valid_overnight_sentences = [
-    OvernightTestCase(
-        "simple_request", "(listValue (getProperty en.block.block1 width))"
-    ),
+    OvernightTestCase("simple_request", "(listValue (getProperty en.block.block1 width))"),
     OvernightTestCase(
         "simple_filter",
         "(listValue (filter (getProperty (singleton en.block) !type) height = 3 en.inch))",
@@ -76,9 +74,7 @@ valid_overnight_sentences = [
 
 valid_overnight_prefixes = [
     OvernightTestCase("empty_string", ""),
-    OvernightTestCase(
-        "unbalanced_paranthesis", "(listValue (getProperty en.block.block1 width"
-    ),
+    OvernightTestCase("unbalanced_paranthesis", "(listValue (getProperty en.block.block1 width"),
     OvernightTestCase("undefined_argument", "(listValue (getProperty en.block.block1"),
     OvernightTestCase(
         "left_comarisson",
@@ -87,14 +83,10 @@ valid_overnight_prefixes = [
 ]
 
 invalid_overnight_sentences = [
-    OvernightTestCase(
-        "unknown_property", "(listValue (getProperty en.block.block1 sparkliness))"
-    ),
+    OvernightTestCase("unknown_property", "(listValue (getProperty en.block.block1 sparkliness))"),
     OvernightTestCase("property", "(getProperty en.block.block1 width)"),
     OvernightTestCase("number_value", "3 en.inch"),
-    OvernightTestCase(
-        "extra_space", "(listValue ( getProperty en.block.block1 width))"
-    ),
+    OvernightTestCase("extra_space", "(listValue ( getProperty en.block.block1 width))"),
     OvernightTestCase("empty_operator", "(listValue (getProperty ))"),
     OvernightTestCase("empty_paranthesis", "()"),
     OvernightTestCase("missing_argument", "(listValue (getProperty en.block.block1 ))"),
@@ -107,26 +99,21 @@ invalid_overnight_sentences = [
 
 class Test_parsing_overnight_object(TestCase):
     def setUp(self):
-        with open(f"examples/grammars/overnight.ebnf", "r") as file:
+        with open(f"examples/grammars/overnight.ebnf") as file:
             input_text = file.read()
         parsed_grammar = parse_ebnf(input_text)
         print("PARSED GRAMMAR:", parsed_grammar.grammar_encoding, flush=True)
         start_rule_id = parsed_grammar.symbol_table["root"]
-        self.recognizer = StringRecognizer(
-            parsed_grammar.grammar_encoding, start_rule_id
-        )
+        self.recognizer = StringRecognizer(parsed_grammar.grammar_encoding, start_rule_id)
 
     def test_valid_sentence(self):
-
         for overnight_test_case in valid_overnight_sentences:
             self.assertEqual(
                 True,
                 self.recognizer._accept_string(overnight_test_case.overnight),
                 msg=f"Failed on {overnight_test_case.name}, {overnight_test_case.overnight}",
             )
-        for overnight_test_case in (
-            valid_overnight_prefixes + invalid_overnight_sentences
-        ):
+        for overnight_test_case in valid_overnight_prefixes + invalid_overnight_sentences:
             self.assertEqual(
                 False,
                 self.recognizer._accept_string(overnight_test_case.overnight),

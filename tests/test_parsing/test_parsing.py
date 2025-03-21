@@ -1,25 +1,25 @@
+import logging
 from unittest import TestCase
 
 from transformers_cfg.parser import (
-    END_OF_GRAMMAR_MARKER,
-    remove_leading_white_space,
-    parse_name,
-    _parse_rhs_negated_char_ranges,
-    _parse_rhs_char_ranges,
-    _parse_rhs_literal_string,
-    _parse_rhs_any_char,
-    ParseState,
-    parse_simple_rhs,
-    END_OF_RULE_MARKER,
-    _parse_rhs_symbol_reference,
-    REF_RULE_MARKER,
-    parse_rhs,
     END_OF_ALTERNATE_MARKER,
+    END_OF_GRAMMAR_MARKER,
+    END_OF_RULE_MARKER,
+    REF_RULE_MARKER,
     AlternativeElements,
     GrammarRule,
-    parse_ebnf
+    ParseState,
+    _parse_rhs_any_char,
+    _parse_rhs_char_ranges,
+    _parse_rhs_literal_string,
+    _parse_rhs_negated_char_ranges,
+    _parse_rhs_symbol_reference,
+    parse_ebnf,
+    parse_name,
+    parse_rhs,
+    parse_simple_rhs,
+    remove_leading_white_space,
 )
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +54,7 @@ class Test(TestCase):
     def test_remove_leading_white_space(self):
         rule = " \t root ::= [0-9]+"
         _rule = remove_leading_white_space(rule, rm_leading_newline=False)
-        self.assertEqual(
-            rule.strip(), _rule, f"_rule: {_rule} != rule.strip(): {rule.strip()}"
-        )
+        self.assertEqual(rule.strip(), _rule, f"_rule: {_rule} != rule.strip(): {rule.strip()}")
         self.assertEqual("root ::= [0-9]+", _rule, f"_rule: {_rule} != root ::= [0-9]+")
 
         rule_comment = "# comment"
@@ -65,18 +63,14 @@ class Test(TestCase):
 
         # this function only removes leading white space and comments
         rule_end_with_comment = "root ::= [0-9]+ # comment"
-        _rule = remove_leading_white_space(
-            rule_end_with_comment, rm_leading_newline=False
-        )
+        _rule = remove_leading_white_space(rule_end_with_comment, rm_leading_newline=False)
 
         self.assertEqual(
             rule_end_with_comment, _rule, f"_rule: {_rule} != {rule_end_with_comment}"
         )
 
         rule_comment_w_newline = "# comment\n root ::= [0-9]+"
-        _rule = remove_leading_white_space(
-            rule_comment_w_newline, rm_leading_newline=True
-        )
+        _rule = remove_leading_white_space(rule_comment_w_newline, rm_leading_newline=True)
 
         self.assertEqual("root ::= [0-9]+", _rule, f"_rule: {_rule} != root ::= [0-9]+")
 
@@ -108,9 +102,7 @@ class Test(TestCase):
         remaining_src = _parse_rhs_negated_char_ranges(src, alternative)
         outbuf = alternative.serialize()[1:-1]
         self.assertEqual(13, len(outbuf), f"len(outbuf): {len(outbuf)} != 13")
-        self.assertListEqual(
-            [12, 0, 96, 98, 100, 102, 104, 106, 110, 112, 116, 118, 255], outbuf
-        )
+        self.assertListEqual([12, 0, 96, 98, 100, 102, 104, 106, 110, 112, 116, 118, 255], outbuf)
         self.assertEqual("", remaining_src, f"remaining_src: {remaining_src} != ''")
 
         src = "[^0-9a-z]"
@@ -141,9 +133,7 @@ class Test(TestCase):
         outbuf = alternative.serialize()[1:-1]
         self.assertEqual(1 + 2 * 5, len(outbuf), f"len(outbuf): {len(outbuf)} != 11")
         self.assertListEqual([10, 48, 48, 49, 49, 50, 50, 51, 51, 52, 52], outbuf)
-        self.assertEqual(
-            "[0-9]", remaining_src, f"remaining_src: {remaining_src} != ''"
-        )
+        self.assertEqual("[0-9]", remaining_src, f"remaining_src: {remaining_src} != ''")
 
     def test__parse_rhs_any_char(self):
         src = "."
@@ -240,9 +230,7 @@ class Test(TestCase):
         rhs_src = ""
         state = ParseState()
         state.symbol_table["root"] = 9
-        _ = parse_rhs(
-            state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False
-        )
+        _ = parse_rhs(state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False)
         self.assertListEqual(
             [9, 1, END_OF_ALTERNATE_MARKER, END_OF_RULE_MARKER, END_OF_GRAMMAR_MARKER],
             state.grammar_encoding,
@@ -255,9 +243,7 @@ class Test(TestCase):
         rhs_src = '"0"\n'
         name, _ = parse_name(src)
         rule = GrammarRule(0, "root")
-        parse_simple_rhs(
-            state=state, rhs=rhs_src, rule_name="root", rule=rule, is_nested=False
-        )
+        parse_simple_rhs(state=state, rhs=rhs_src, rule_name="root", rule=rule, is_nested=False)
         outbuf = rule.alternatives[0].serialize()
         logging.debug(f"outbuf: {outbuf}")
         self.assertEqual(
@@ -267,9 +253,7 @@ class Test(TestCase):
         )
 
         state = ParseState()
-        _ = parse_rhs(
-            state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False
-        )
+        _ = parse_rhs(state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False)
         self.assertEqual(
             9,
             state.grammar_encoding[0],
@@ -291,9 +275,7 @@ class Test(TestCase):
 
         state = ParseState()
         state.symbol_table["root"] = 9
-        _ = parse_rhs(
-            state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False
-        )
+        _ = parse_rhs(state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False)
         self.assertEqual(
             9,
             state.grammar_encoding[0],
@@ -305,9 +287,7 @@ class Test(TestCase):
         rhs_src = '"2" | '
         state = ParseState()
         state.symbol_table["root"] = 9
-        _ = parse_rhs(
-            state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False
-        )
+        _ = parse_rhs(state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False)
         self.assertEqual(
             9,
             state.grammar_encoding[0],
@@ -319,9 +299,7 @@ class Test(TestCase):
         rhs_src = '"2" "3" "4"'
         state = ParseState()
         state.symbol_table["root"] = 9
-        _ = parse_rhs(
-            state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False
-        )
+        _ = parse_rhs(state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False)
         self.assertEqual(
             9,
             state.grammar_encoding[0],
@@ -333,9 +311,7 @@ class Test(TestCase):
         rhs_src = '"234"'
         state = ParseState()
         state.symbol_table["root"] = 9
-        _ = parse_rhs(
-            state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False
-        )
+        _ = parse_rhs(state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False)
         self.assertEqual(
             9,
             state.grammar_encoding[0],
@@ -347,9 +323,7 @@ class Test(TestCase):
         rhs_src = "[234]"
         state = ParseState()
         state.symbol_table["root"] = 9
-        _ = parse_rhs(
-            state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False
-        )
+        _ = parse_rhs(state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False)
         self.assertEqual(
             9,
             state.grammar_encoding[0],
@@ -361,9 +335,7 @@ class Test(TestCase):
         rhs_src = '[234] | "5"'
         state = ParseState()
         state.symbol_table["root"] = 9
-        _ = parse_rhs(
-            state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False
-        )
+        _ = parse_rhs(state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False)
         self.assertEqual(
             9,
             state.grammar_encoding[0],
@@ -375,9 +347,7 @@ class Test(TestCase):
         rhs_src = '[234]"5"'
         state = ParseState()
         state.symbol_table["root"] = 9
-        _ = parse_rhs(
-            state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False
-        )
+        _ = parse_rhs(state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False)
         self.assertEqual(
             9,
             state.grammar_encoding[0],
@@ -389,9 +359,7 @@ class Test(TestCase):
         rhs_src = '("2" | "3" | "4") | ("5" | "6" | "7")'
         state = ParseState()
         state.symbol_table["root"] = 9
-        _ = parse_rhs(
-            state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False
-        )
+        _ = parse_rhs(state=state, rhs=rhs_src, rule_name="root", rule_id=9, is_nested=False)
         logging.debug(f"state.grammar_encoding of {rhs_src}: {state.grammar_encoding}")
 
     def test__parse_symbol_reference(self):
@@ -400,9 +368,7 @@ class Test(TestCase):
         alternative = AlternativeElements()
         _parse_rhs_symbol_reference("root", state, alternative=alternative)
         outbuf = alternative.serialize()[1:-1]
-        self.assertEqual(
-            REF_RULE_MARKER, outbuf[0], f"outbuf[0]: {outbuf[0]} != REF_RULE_MARKER"
-        )
+        self.assertEqual(REF_RULE_MARKER, outbuf[0], f"outbuf[0]: {outbuf[0]} != REF_RULE_MARKER")
         expected_symbol_id = state.symbol_table["root"]
         self.assertEqual(expected_symbol_id, outbuf[1], f"outbuf[1]: {outbuf[1]} != 0")
         # outbuf == [REF_RULE_MARKER, 0] == [1, 0]
@@ -414,9 +380,7 @@ class Test(TestCase):
         alternative = AlternativeElements()
         _parse_rhs_symbol_reference("root", state, alternative=alternative)
         outbuf = alternative.serialize()[1:-1]
-        self.assertEqual(
-            REF_RULE_MARKER, outbuf[0], f"outbuf[0]: {outbuf[0]} != REF_RULE_MARKER"
-        )
+        self.assertEqual(REF_RULE_MARKER, outbuf[0], f"outbuf[0]: {outbuf[0]} != REF_RULE_MARKER")
         self.assertEqual(19, outbuf[1], f"outbuf[1]: {outbuf[1]} != 19")
 
     # def test__parse_rhs_grouping(self):
@@ -472,9 +436,7 @@ class Test(TestCase):
 
         state = ParseState()
         rule = GrammarRule(0, "root")
-        parse_simple_rhs(
-            state=state, rhs=rhs_src, rule_name="root", rule=rule, is_nested=True
-        )
+        parse_simple_rhs(state=state, rhs=rhs_src, rule_name="root", rule=rule, is_nested=True)
         logging.debug(f"outbuf: {rule.serialize()}")
         logging.debug(f"parse_simple_rhs: {state.grammar_encoding}")
 

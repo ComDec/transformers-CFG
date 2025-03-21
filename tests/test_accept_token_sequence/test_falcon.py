@@ -9,7 +9,6 @@ from tests.test_accept_token_sequence._test_accept_tokens_mixin import (
 
 @unittest.skip("Falcom is not supported and will be removed")
 class FalconTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = AutoTokenizer
     pretrained_name = "tiiuae/falcon-7b"
 

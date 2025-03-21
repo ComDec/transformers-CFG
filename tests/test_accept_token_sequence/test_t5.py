@@ -9,7 +9,6 @@ from tests.test_accept_token_sequence._test_accept_tokens_mixin import (
 
 # @unittest.skip("T5Tokenizer's mapping is not well defined, not working")
 class T5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = T5TokenizerFast
     pretrained_name = "t5-small"
 

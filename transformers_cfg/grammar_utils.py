@@ -3,7 +3,6 @@ from .token_grammar_recognizer import (
     NonIncrementalTokenSeqRecognizer,
 )
 
-
 # Old class name, kept for backward compatibility
 IncrementalGrammarConstraint = IncrementalTokenRecognizer
 

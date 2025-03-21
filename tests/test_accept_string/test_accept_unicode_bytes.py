@@ -1,10 +1,8 @@
+import logging
 from unittest import TestCase
 
-from transformers_cfg.recognizer import StringRecognizer
-
 from transformers_cfg.parser import parse_ebnf
-
-import logging
+from transformers_cfg.recognizer import StringRecognizer
 
 
 class TestUnicode(TestCase):
@@ -14,7 +12,7 @@ class TestUnicode(TestCase):
         """
 
         japanese = "こんにちは世界"
-        with open("examples/grammars/japanese.ebnf", "r") as file:
+        with open("examples/grammars/japanese.ebnf") as file:
             input_text = file.read()
         parsed_grammar = parse_ebnf(input_text)
 
@@ -23,9 +21,7 @@ class TestUnicode(TestCase):
         recognizer = StringRecognizer(parsed_grammar.grammar_encoding, start_rule_id)
 
         bytes_japanese = bytes(japanese, "utf-8")
-        logging.debug(
-            f"bytes_japanese: {bytes_japanese} of length {len(bytes_japanese)}"
-        )
+        logging.debug(f"bytes_japanese: {bytes_japanese} of length {len(bytes_japanese)}")
         # こんにちは世界
 
         head_bytes = bytes_japanese[:8]
@@ -41,7 +37,7 @@ class TestUnicode(TestCase):
         #######################
 
         japanese = "こんにちは世界"
-        with open("examples/grammars/japanese.ebnf", "r") as file:
+        with open("examples/grammars/japanese.ebnf") as file:
             input_text = file.read()
         parsed_grammar = parse_ebnf(input_text)
 
@@ -50,9 +46,7 @@ class TestUnicode(TestCase):
         recognizer = StringRecognizer(parsed_grammar.grammar_encoding, start_rule_id)
 
         bytes_japanese = bytes(japanese, "utf-8")
-        logging.debug(
-            f"bytes_japanese: {bytes_japanese} of length {len(bytes_japanese)}"
-        )
+        logging.debug(f"bytes_japanese: {bytes_japanese} of length {len(bytes_japanese)}")
 
         byte_tokens = [bytes_japanese[i] for i in range(len(bytes_japanese))]
         # cast into bytes
@@ -71,7 +65,7 @@ class TestUnicode(TestCase):
         """
 
         emoji = "😀😄😂"
-        with open("examples/grammars/emoji.ebnf", "r") as file:
+        with open("examples/grammars/emoji.ebnf") as file:
             input_text = file.read()
         parsed_grammar = parse_ebnf(input_text)
 

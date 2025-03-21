@@ -1,20 +1,19 @@
 import re
 from typing import List, Set
+
 from transformers import (
-    GPT2TokenizerFast,
     BartTokenizerFast,
-    LlamaTokenizerFast,
-    T5TokenizerFast,
     CodeGenTokenizerFast,
-    PreTrainedTokenizerFast,
     GemmaTokenizerFast,
-    Qwen2TokenizerFast
+    GPT2TokenizerFast,
+    LlamaTokenizerFast,
+    PreTrainedTokenizerFast,
+    Qwen2TokenizerFast,
+    T5TokenizerFast,
 )
 
 from transformers_cfg.tokenization.SUPPORTED_TOKENIZERS import SUPPORTED_TOKENIZERS
-from transformers_cfg.tokenization.utils import (
-    replace_hex,
-)
+from transformers_cfg.tokenization.utils import replace_hex
 
 
 def get_TCFG_tokenizer_class(model_name_or_tokenizer):
@@ -38,9 +37,7 @@ class TCFG_Tokenizer:
 
     def get_tokens_as_bytes(self) -> List[bytes]:
         vocab_size = self.real_vocab_size()
-        token_as_bytes: List[bytes] = [
-            self._format_token_as_bytes(i) for i in range(vocab_size)
-        ]
+        token_as_bytes: List[bytes] = [self._format_token_as_bytes(i) for i in range(vocab_size)]
 
         return token_as_bytes
 
@@ -60,9 +57,10 @@ class TCFG_Tokenizer:
         elif isinstance(hf_tokenizer, CodeGenTokenizerFast):
             # phi reuses the codegen tokenizer
             return TCFG_PhiTokenizer(hf_tokenizer)
-        elif isinstance(
-            hf_tokenizer, PreTrainedTokenizerFast
-        ) and 'Meta-Llama-3' in hf_tokenizer.name_or_path:
+        elif (
+            isinstance(hf_tokenizer, PreTrainedTokenizerFast)
+            and "Meta-Llama-3" in hf_tokenizer.name_or_path
+        ):
             return TCFG_LlamaTokenizer(hf_tokenizer)
         else:
             raise NotImplementedError(
@@ -90,13 +88,9 @@ class TCFG_LlamaTokenizer(TCFG_Tokenizer):
             # with first 13 being characters for bytes: {'õ': 32000, '÷': 32001, 'Á': 32002, 'ý': 32003, 'À': 32004, 'ÿ': 32005, 'ø': 32006, 'ú': 32007, 'þ': 32008, 'ü': 32009, 'ù': 32010, 'ö': 32011, 'û': 32012}
             # the rest are special tokens for the tokenizer: { '<｜begin▁of▁sentence｜>': 32013, '<｜end▁of▁sentence｜>': 32014, '<｜fim▁hole｜>': 32015, '<｜fim▁begin｜>': 32016, '<｜fim▁end｜>': 32017, '<pad>': 32018, '<|User|>': 32019, '<|Assistant|>': 32020, '<|EOT|>': 32021}
             added_vocab_dict = self.hf_tokenizer.get_added_vocab()
-            added_tokens_id_to_excluded = set(
-                [
-                    token_id
-                    for tok, token_id in added_vocab_dict.items()
-                    if tok.startswith("<｜")
-                ]
-            )
+            added_tokens_id_to_excluded = {
+                token_id for tok, token_id in added_vocab_dict.items() if tok.startswith("<｜")
+            }
             return self.special_token_ids.union(added_tokens_id_to_excluded)
         return self.special_token_ids
 

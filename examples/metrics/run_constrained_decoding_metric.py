@@ -1,4 +1,4 @@
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from transformers_cfg.generation import GrammarConstrainedLogitsProcessor
 from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
@@ -17,7 +17,7 @@ if __name__ == "__main__":
     model.generation_config.pad_token_id = model.generation_config.eos_token_id
 
     # Load json grammar
-    with open("examples/grammars/json.ebnf", "r") as file:
+    with open("examples/grammars/json.ebnf") as file:
         grammar_str = file.read()
     grammar = IncrementalGrammarConstraint(grammar_str, "root", tokenizer)
     grammar_processor = GrammarConstrainedLogitsProcessor(grammar)

@@ -3,9 +3,9 @@ import argparse
 import itertools
 import json
 import re
-import requests
 from typing import Any, List, Set, Tuple, Union
 
+import requests
 
 # adapted from https://github.com/ggerganov/llama.cpp/blob/ab9a3240a9da941fdef5cd4a25f2b97c2f5a67aa/examples/json_schema_to_grammar.py
 
@@ -37,9 +37,7 @@ def _build_repetition(
         """
 
         content = (
-            f"{separator_rule} {item_rule}"
-            if prefix_with_sep and separator_rule
-            else item_rule
+            f"{separator_rule} {item_rule}" if prefix_with_sep and separator_rule else item_rule
         )
         if up_to_n == 0:
             return ""
@@ -95,13 +93,9 @@ PRIMITIVE_RULES = {
         '"{" space ( string ":" space value ("," space string ":" space value)* )? "}" space',
         ["string", "value"],
     ),
-    "array": BuiltinRule(
-        '"[" space ( value ("," space value)* )? "]" space', ["value"]
-    ),
+    "array": BuiltinRule('"[" space ( value ("," space value)* )? "]" space', ["value"]),
     "uuid": BuiltinRule(
-        r'"\"" '
-        + ' "-" '.join("[0-9a-fA-F]" * n for n in [8, 4, 4, 4, 12])
-        + r' "\"" space',
+        r'"\"" ' + ' "-" '.join("[0-9a-fA-F]" * n for n in [8, 4, 4, 4, 12]) + r' "\"" space',
         [],
     ),
     "char": BuiltinRule(
@@ -131,9 +125,7 @@ STRING_FORMAT_RULES = {
 DOTALL = "[\\U00000000-\\U0010FFFF]"
 DOT = "[^\\x0A\\x0D]"
 
-RESERVED_NAMES = set(
-    ["root", "dot", *PRIMITIVE_RULES.keys(), *STRING_FORMAT_RULES.keys()]
-)
+RESERVED_NAMES = {"root", "dot", *PRIMITIVE_RULES.keys(), *STRING_FORMAT_RULES.keys()}
 
 INVALID_RULE_CHARS_RE = re.compile(r"[^a-zA-Z0-9-]+")
 GRAMMAR_LITERAL_ESCAPE_RE = re.compile(r'[\r\n"]')
@@ -194,10 +186,7 @@ class SchemaConverter:
             key = esc_name
         else:
             i = 0
-            while (
-                f"{esc_name}{i}" in self._rules
-                and self._rules[f"{esc_name}{i}"] != rule
-            ):
+            while f"{esc_name}{i}" in self._rules and self._rules[f"{esc_name}{i}"] != rule:
                 i += 1
             key = f"{esc_name}{i}"
         self._rules[key] = rule
@@ -227,9 +216,7 @@ class SchemaConverter:
 
                         target = self._refs.get(base_url)
                         if target is None:
-                            target = self.resolve_refs(
-                                requests.get(ref).json(), base_url
-                            )
+                            target = self.resolve_refs(requests.get(ref).json(), base_url)
                             self._refs[base_url] = target
 
                         if len(frag_split) == 1 or frag_split[-1] == "":
@@ -388,9 +375,7 @@ class SchemaConverter:
                             min_times = int(nums[0]) if nums[0] else 0
                             max_times = int(nums[1]) if nums[1] else None
                     except ValueError:
-                        raise ValueError(
-                            f"Invalid quantifier {curly_brackets} in /{pattern}/"
-                        )
+                        raise ValueError(f"Invalid quantifier {curly_brackets} in /{pattern}/")
 
                     (sub, sub_is_literal) = seq[-1]
 
@@ -483,20 +468,15 @@ class SchemaConverter:
             )
 
         elif "const" in schema:
-            return self._add_rule(
-                rule_name, self._generate_constant_rule(schema["const"])
-            )
+            return self._add_rule(rule_name, self._generate_constant_rule(schema["const"]))
 
         elif "enum" in schema:
-            rule = " | ".join((self._generate_constant_rule(v) for v in schema["enum"]))
+            rule = " | ".join(self._generate_constant_rule(v) for v in schema["enum"])
             return self._add_rule(rule_name, rule)
 
         elif schema_type in (None, "object") and (
             "properties" in schema
-            or (
-                "additionalProperties" in schema
-                and schema["additionalProperties"] is not True
-            )
+            or ("additionalProperties" in schema and schema["additionalProperties"] is not True)
         ):
             required = set(schema.get("required", []))
             properties = list(schema.get("properties", {}).items())
@@ -537,9 +517,7 @@ class SchemaConverter:
                 ),
             )
 
-        elif schema_type in (None, "array") and (
-            "items" in schema or "prefixItems" in schema
-        ):
+        elif schema_type in (None, "array") and ("items" in schema or "prefixItems" in schema):
             items = schema.get("items") or schema["prefixItems"]
             if isinstance(items, list):
                 return self._add_rule(
@@ -567,36 +545,27 @@ class SchemaConverter:
         elif schema_type in (None, "string") and "pattern" in schema:
             return self._visit_pattern(schema["pattern"], rule_name)
 
-        elif schema_type in (None, "string") and re.match(
-            r"^uuid[1-5]?$", schema_format or ""
-        ):
+        elif schema_type in (None, "string") and re.match(r"^uuid[1-5]?$", schema_format or ""):
             return self._add_primitive(
                 "root" if rule_name == "root" else schema_format,
                 PRIMITIVE_RULES["uuid"],
             )
 
-        elif (
-            schema_type in (None, "string")
-            and f"{schema_format}-string" in STRING_FORMAT_RULES
-        ):
+        elif schema_type in (None, "string") and f"{schema_format}-string" in STRING_FORMAT_RULES:
             prim_name = f"{schema_format}-string"
             return self._add_rule(
                 rule_name,
                 self._add_primitive(prim_name, STRING_FORMAT_RULES[prim_name]),
             )
 
-        elif schema_type == "string" and (
-            "minLength" in schema or "maxLength" in schema
-        ):
+        elif schema_type == "string" and ("minLength" in schema or "maxLength" in schema):
             char_rule = self._add_primitive("char", PRIMITIVE_RULES["char"])
             min_len = schema.get("minLength", 0)
             max_len = schema.get("maxLength")
 
             return self._add_rule(
                 rule_name,
-                r'"\"" '
-                + _build_repetition(char_rule, min_len, max_len)
-                + r' "\"" space',
+                r'"\"" ' + _build_repetition(char_rule, min_len, max_len) + r' "\"" space',
             )
 
         elif (schema_type == "object") or (len(schema) == 0):
@@ -641,9 +610,7 @@ class SchemaConverter:
 
         prop_kv_rule_names = {}
         for prop_name, prop_schema in properties:
-            prop_rule_name = self.visit(
-                prop_schema, f'{name}{"-" if name else ""}{prop_name}'
-            )
+            prop_rule_name = self.visit(prop_schema, f'{name}{"-" if name else ""}{prop_name}')
             prop_kv_rule_names[prop_name] = self._add_rule(
                 f'{name}{"-" if name else ""}{prop_name}-kv',
                 rf'{self._format_literal(json.dumps(prop_name))} space ":" space {prop_rule_name}',
@@ -713,7 +680,7 @@ class SchemaConverter:
 def parse_args():
     parser = argparse.ArgumentParser(
         description="""
-            Generates an EBNF grammar that produces JSON conforming to a given JSON schema. 
+            Generates an EBNF grammar that produces JSON conforming to a given JSON schema.
             Only a subset of JSON schema features are supported; more may be added in the future.
         """,
     )

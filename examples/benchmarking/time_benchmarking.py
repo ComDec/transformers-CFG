@@ -1,10 +1,12 @@
+import sys
+import time
+from dataclasses import dataclass
+
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
+
 from transformers_cfg.generation.logits_process import GrammarConstrainedLogitsProcessor
-import time
-import sys
-from dataclasses import dataclass
+from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
 
 
 @dataclass
@@ -37,9 +39,7 @@ def main():
     model_id = args.model_id
 
     # Detect if GPU is available, otherwise use CPU
-    device = torch.device(
-        args.device or ("cuda" if torch.cuda.is_available() else "cpu")
-    )
+    device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
     print(f"Using device: {device}, max new tokens: {args.max_new_tokens}")
 
     # Load model and tokenizer
@@ -49,16 +49,14 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
 
     # Load grammar
-    with open(args.grammar_filepath, "r") as file:
+    with open(args.grammar_filepath) as file:
         grammar_str = file.read()
 
     grammar = IncrementalGrammarConstraint(grammar_str, "root", tokenizer)
     grammar_processor = GrammarConstrainedLogitsProcessor(grammar)
 
     # Generate
-    args.prompt = args.prompt.replace(
-        MAX_NEW_TOKEN_PLACEHOLDER, str(args.max_new_tokens)
-    )
+    args.prompt = args.prompt.replace(MAX_NEW_TOKEN_PLACEHOLDER, str(args.max_new_tokens))
 
     input_ids = tokenizer(
         [args.prompt], add_special_tokens=False, return_tensors="pt", padding=True

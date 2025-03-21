@@ -1,8 +1,9 @@
 import unittest
-from transformers_cfg.utf8_utils import (
-    decode_utf8,
+
+from transformers_cfg.utf8_utils import (  # Make sure to import your function and class
     PartialUTF8,
-)  # Make sure to import your function and class
+    decode_utf8,
+)
 
 
 class TestDecodeUTF8(unittest.TestCase):

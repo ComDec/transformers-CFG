@@ -1,7 +1,8 @@
-import datasets
 from dataclasses import dataclass, field
-import torch
+
+import datasets
 import pandas as pd
+import torch
 
 _DESCRIPTION = "TODO"
 
@@ -68,9 +69,7 @@ class ConstrainedDecodingMetricOutput:
 
     def __repr__(self):
         # Collecting all attribute names except for the tensors and metadata contents
-        attributes_info = ", ".join(
-            f"{k}" for k in self.__dict__.keys() if k != "metadata"
-        )
+        attributes_info = ", ".join(f"{k}" for k in self.__dict__.keys() if k != "metadata")
 
         # Creating a string for metadata with more detail
         meta_info = ", ".join(f"{k}: {v}" for k, v in self.metadata.items())
@@ -120,13 +119,9 @@ class RejectProbDropFromConstraint(datasets.Metric):
             inputs_description=_KWARGS_DESCRIPTION,
             features=datasets.Features(
                 {
-                    "scores": datasets.Sequence(
-                        datasets.Sequence(datasets.Value("float"))
-                    ),
+                    "scores": datasets.Sequence(datasets.Sequence(datasets.Value("float"))),
                     # the scores we expect is Tuple[torch.Tensor]
-                    "logits": datasets.Sequence(
-                        datasets.Sequence(datasets.Value("float"))
-                    ),
+                    "logits": datasets.Sequence(datasets.Sequence(datasets.Value("float"))),
                 }
             ),
             reference_urls=[],
@@ -159,12 +154,8 @@ class ConstrainedDecodingMetric(datasets.Metric):
             inputs_description=_KWARGS_DESCRIPTION,
             features=datasets.Features(
                 {
-                    "scores": datasets.Sequence(
-                        datasets.Sequence(datasets.Value("float"))
-                    ),
-                    "logits": datasets.Sequence(
-                        datasets.Sequence(datasets.Value("float"))
-                    ),
+                    "scores": datasets.Sequence(datasets.Sequence(datasets.Value("float"))),
+                    "logits": datasets.Sequence(datasets.Sequence(datasets.Value("float"))),
                     "sequences": datasets.Sequence(datasets.Value("int32")),
                 }
             ),
@@ -227,9 +218,7 @@ class ConstrainedDecodingMetric(datasets.Metric):
         scores = torch.tensor(scores)
         logits = torch.tensor(logits)
 
-        total_reject_prob_gain = self.underlying_metric.compute(
-            scores=scores, logits=logits
-        )
+        total_reject_prob_gain = self.underlying_metric.compute(scores=scores, logits=logits)
         # compute the information total_reject_entropy_gain of (1 - total_reject_prob_gain, total_reject_prob_gain)
         total_reject_entropy_gain = -total_reject_prob_gain * torch.log2(
             total_reject_prob_gain
@@ -240,9 +229,7 @@ class ConstrainedDecodingMetric(datasets.Metric):
         original_probs = torch.nn.functional.softmax(logits, dim=-1)
         renormalised_probs = torch.nn.functional.softmax(scores, dim=-1)
         # get the original_probs of the sequence
-        original_token_probs = torch.gather(
-            original_probs, 2, sequences.unsqueeze(2)
-        ).squeeze(2)
+        original_token_probs = torch.gather(original_probs, 2, sequences.unsqueeze(2)).squeeze(2)
         # get the scores of the sequence
         renormalised_token_probs = torch.gather(
             renormalised_probs, 2, sequences.unsqueeze(2)
@@ -292,7 +279,7 @@ if __name__ == "__main__":
 
     ############################################
 
-    from transformers import AutoTokenizer, AutoModelForCausalLM
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
     model_id = "gpt2"
 

@@ -8,7 +8,6 @@ from tests.test_accept_token_sequence._test_accept_tokens_mixin import (
 
 
 class GPT2TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = GPT2TokenizerFast
     pretrained_name = "gpt2"
 
