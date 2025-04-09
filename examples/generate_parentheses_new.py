@@ -51,7 +51,6 @@ if __name__ == "__main__":
     print(f"N tokens: {len(tokenizer.get_vocab())}")
     # Load model to defined device
     model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
-    model = model.to(torch.bfloat16)
 
      # Generate
     prefix1 = """This is a string with properly balanced parentheses, brackets, and angle brackets:"""
@@ -109,29 +108,78 @@ if __name__ == "__main__":
 
     with open("cfg-only-untrained.txt", "w+") as f:
 
-        for _ in tqdm(range(10000)):
+        with torch.no_grad():
 
-            grammar_processor.reset()
-            
-            constrained_output = model.generate(
-                input_ids,
-                do_sample=True,
-                max_new_tokens=max_new_tokens,
-                min_new_tokens=10,
-                logits_processor=[grammar_processor],
-                num_return_sequences=1,
-                temperature=3.0,
-            )
+            for _ in tqdm(range(10000)):
 
-            # print("Unconstrained: ", tokenizer.decode(unconstrained_output[0], skip_special_tokens=True))
-            decoded = tokenizer.decode(constrained_output[0], skip_special_tokens=False)
+                grammar_processor.reset()
+                
+                # 初始化参数
+                current_ids = input_ids.clone()
+                past_key_values = None
+                generated_tokens = 0
+                min_new_tokens = 10
+                temperature = 1.0
+                
+                terminated = False
+                termination_token_id = tokenizer.eos_token_id  # 获取EOS token ID
 
-            print("Constrained: ", decoded)
-            print(constrained_output[0][prompt_length:])
+                # 自回归生成循环
+                while generated_tokens < max_new_tokens and not terminated:
+                    # 准备输入（首次全量输入，后续用缓存）
+                    if past_key_values is not None:
+                        next_input_ids = current_ids[:, -1:]
+                    else:
+                        next_input_ids = current_ids
+                    
+                    # 前向推理
+                    outputs = model(
+                        input_ids=next_input_ids,
+                        past_key_values=past_key_values,
+                    )
+                    next_token_logits = outputs.logits[:, -1, :]
+                    past_key_values = outputs.past_key_values
 
-            sequences.append(decoded)
 
-            f.write(decoded + "\n")
-    
+                    # 应用所有logits处理器（语法约束等）
+                    import ipdb; ipdb.set_trace()
+                    next_token_logits = grammar_processor(current_ids, next_token_logits, prompt_length=prompt_length)
 
-    
+                    # 强制长度约束
+                    if generated_tokens < min_new_tokens:
+                        next_token_logits[:, termination_token_id] = -torch.inf  # 禁止提前终止
+                    elif generated_tokens >= max_new_tokens - 1:
+                        mask = torch.ones_like(next_token_logits, dtype=torch.bool)
+                        mask[:, termination_token_id] = False
+                        next_token_logits[mask] = -torch.inf  # 强制终止
+
+                    # 应用温度采样
+                    import ipdb; ipdb.set_trace()
+                    scaled_logits = next_token_logits / temperature
+                    probabilities = torch.softmax(scaled_logits, dim=-1)
+                    next_token = torch.multinomial(probabilities, num_samples=1)
+
+                    # 更新生成序列
+                    current_ids = torch.cat([current_ids, next_token], dim=-1)
+                    generated_tokens += 1
+
+                    # 终止条件检查
+                    if next_token.item() == termination_token_id:
+                        if generated_tokens >= min_new_tokens:
+                            terminated = True
+                    if generated_tokens >= max_new_tokens:
+                        terminated = True
+
+                # 最终解码输出
+                decoded = tokenizer.decode(current_ids[0], skip_special_tokens=False)
+
+
+                print("Constrained: ", decoded)
+                print(decoded[0][prompt_length:])
+
+                sequences.append(decoded)
+
+                f.write(decoded + "\n")
+        
+
+        
