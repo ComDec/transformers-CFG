@@ -259,6 +259,7 @@ class GrammarLogitsProcessorPartheseness(LogitsProcessor):
         nice_token_ids_list: Optional[torch.tensor] = None,
         execution_mode: Literal["full", "limited"] = "limited",
         max_batch_size: int = 512,
+        return_dict: bool = True,
     ) -> None:
         self.device = device
         self.tokenizer = tokenizer
@@ -268,6 +269,7 @@ class GrammarLogitsProcessorPartheseness(LogitsProcessor):
             parsed_grammar.grammar_encoding, parsed_grammar.symbol_table["root"]
         )
         self.max_batch_size = max_batch_size
+        self.return_dict = return_dict
         self.generate_idx_list(self.max_batch_size)
 
     def mask_logits(
@@ -344,8 +346,11 @@ class GrammarLogitsProcessorPartheseness(LogitsProcessor):
     def generate_idx_list(self, size: int = 512):
         self.current_partheseness_start = [0 for _ in range(size)]
 
+    def set_prompt_length(self, prompt_length: int):
+        self.prompt_length = prompt_length
+
     def process_logits(
-        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, prompt_length: int = 0
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, prompt_length: Optional[int] = -1
     ) -> torch.FloatTensor:
         """
         :param input_ids:
@@ -355,14 +360,24 @@ class GrammarLogitsProcessorPartheseness(LogitsProcessor):
         if self.device is None:
             device = scores.device
 
+        if prompt_length < 0:
+            prompt_length = self.prompt_length
+
         masked_scores, acceptance = self.mask_logits(input_ids, scores, device, prompt_length)
-        return {"masked_logits": masked_scores, "acceptance": acceptance}
+
+        if self.return_dict:
+            return {
+                "masked_logits": masked_scores,
+                "acceptance": acceptance,
+            }
+        else:
+            return masked_scores
 
     def reset(self):
         self.generate_idx_list(self.max_batch_size)
 
     def __call__(
-        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, prompt_length: int = 0
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, prompt_length: Optional[int] = -0
     ) -> torch.FloatTensor:
         return self.process_logits(input_ids, scores, prompt_length)
 
@@ -427,7 +442,6 @@ class GrammarIncrementalLogitsProcessorForNumberOnly(LogitsProcessor):
             if input_ids[batch, -1] == self.tokenizer.eos_token_id:
                 acceptance[batch, self.tokenizer.eos_token_id] = True
                 continue
-
             for i, token in enumerate(nice_token_decodings):
                 prefix = decoded_token_list[batch] + nice_token_decodings[i] + ","
                 if self.string_grammar._accept_prefix(prefix):
@@ -470,7 +484,7 @@ class GrammarIncrementalLogitsProcessorForNumberOnly(LogitsProcessor):
         self.current_prefix = ["" for _ in range(input_ids.shape[0])]
 
         masked_scores, acceptance = self.mask_logits(input_ids, scores, device, prompt_length)
-        return masked_scores, acceptance
+        return {"masked_logits": masked_scores, "acceptance": acceptance}
 
     def __call__(
         self, input_ids: torch.LongTensor, scores: torch.FloatTensor, prompt_length: int = 0
@@ -573,7 +587,7 @@ class GrammarConstrainedLogitsProcessor(LogitsProcessor):
             logger.debug("\n" + pprint.pformat(accepted_tokens))
         # Logits to -inf where False
         masked_logits[~acceptance] = -math.inf
-        return masked_logits
+        return masked_logits, acceptance
 
     def process_logits(
         self, input_ids: torch.LongTensor, scores: torch.FloatTensor
@@ -612,8 +626,8 @@ class GrammarConstrainedLogitsProcessor(LogitsProcessor):
         )
         logger.debug(f"input_ids: {input_ids}")
 
-        masked_scores = self.mask_logits(scores, device)
-        return masked_scores
+        masked_scores, acceptance = self.mask_logits(scores, device)
+        return {"masked_logits": masked_scores, "acceptance": acceptance}
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(
