@@ -169,7 +169,7 @@ class GrammarIncrementalLogitsProcessorGeneral(LogitsProcessor):
         acceptance = torch.zeros(
             (batch_size, len(self.tokenizer)), dtype=torch.bool, device=device
         )
-        acceptance[:, self.tokenizer.eos_token_id] = True
+        # acceptance[:, self.tokenizer.eos_token_id] = True
 
         # connect the decoded token with comma
         decoded_token_list = [
@@ -195,10 +195,15 @@ class GrammarIncrementalLogitsProcessorGeneral(LogitsProcessor):
                     acceptance[batch, self.nice_token_ids_list[i]] = True
                 else:
                     acceptance[batch, self.nice_token_ids_list[i]] = False
-            if acceptance[batch].sum() == 1:
-                # This is a hacked version to make sure training can continue
-                # If CFG only accept one token (eos), we regard all tokens are acceptable
-                acceptance[batch, :] = True
+                
+                if self.string_grammar._accept_string("".join(decoded_token_list[batch])):
+                    acceptance[batch, self.tokenizer.eos_token_id] = True
+                    
+            # confilt with min_length constraint before, we don't this anymore
+            # if acceptance[batch].sum() == 1:
+            #     # This is a hacked version to make sure training can continue
+            #     # If CFG only accept one token (eos), we regard all tokens are acceptable
+            #     acceptance[batch, :] = True
         # if the logits size of the model is more than the tokennizer vocab
         # we artificially expand the acceptance tensor and block everything
         # beyond the tokenizer vocab size
@@ -285,7 +290,7 @@ class GrammarLogitsProcessorPartheseness(LogitsProcessor):
         acceptance = torch.zeros(
             (batch_size, len(self.tokenizer)), dtype=torch.bool, device=device
         )
-        acceptance[:, self.tokenizer.eos_token_id] = True
+        # acceptance[:, self.tokenizer.eos_token_id] = True
 
         # connect the decoded token with comma
         decoded_token_list = [
@@ -421,7 +426,7 @@ class GrammarIncrementalLogitsProcessorForNumberOnly(LogitsProcessor):
         acceptance = torch.zeros(
             (batch_size, len(self.tokenizer)), dtype=torch.bool, device=device
         )
-        acceptance[:, self.tokenizer.eos_token_id] = True
+        # acceptance[:, self.tokenizer.eos_token_id] = True
 
         # connect the decoded token with comma
         decoded_token_list = [
