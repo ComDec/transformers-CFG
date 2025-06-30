@@ -59,7 +59,7 @@ class TCFG_Tokenizer:
             return TCFG_PhiTokenizer(hf_tokenizer)
         elif (
             isinstance(hf_tokenizer, PreTrainedTokenizerFast)
-            and "Meta-Llama-3" in hf_tokenizer.name_or_path
+            and "Llama" in hf_tokenizer.name_or_path
         ):
             return TCFG_LlamaTokenizer(hf_tokenizer)
         else:
