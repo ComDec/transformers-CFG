@@ -155,13 +155,17 @@ class GrammarIncrementalLogitsProcessorGeneral(LogitsProcessor):
         self.string_grammar = StringRecognizer(
             parsed_grammar.grammar_encoding, parsed_grammar.symbol_table["root"]
         )
+        self.prompt_length = 0
+        self.return_dict = True
+    
+    def set_prompt_length(self, prompt_length: int):
+        self.prompt_length = prompt_length
 
     def mask_logits(
         self,
         input_ids: torch.LongTensor,
         logits: torch.FloatTensor,
         device: torch.device,
-        prompt_length: int = 0,
     ) -> torch.FloatTensor:
         masked_logits = logits.clone()
         # logits: B,L,D
@@ -169,41 +173,52 @@ class GrammarIncrementalLogitsProcessorGeneral(LogitsProcessor):
         acceptance = torch.zeros(
             (batch_size, len(self.tokenizer)), dtype=torch.bool, device=device
         )
-        # acceptance[:, self.tokenizer.eos_token_id] = True
+
+        #Fit GflowNet, terminate at any step is allowed.
+        acceptance[:, self.tokenizer.eos_token_id] = True
 
         # connect the decoded token with comma
         decoded_token_list = [
             [self.tokenizer.decode(token_id) for token_id in token_list]
-            for token_list in input_ids[:, prompt_length:].tolist()
+            for token_list in input_ids[:, self.prompt_length:].tolist()
         ]
         # Precompute decoding for tokens in nice_token_ids_list to avoid redundant decoding inside the loop
         nice_token_decodings = []
         for token in self.nice_token_ids_list:
-            nice_token_decodings.append(self.tokenizer.decode([token]))
+            nice_token_decodings.append(self.tokenizer.decode([token], skip_special_tokens=True))
 
         prefix = ""
+        next_tokens = torch.argmax(logits, dim=-1)
         # prefix at all intermedium state
         for batch in range(batch_size):
             # terminate the generation
             if input_ids[batch, -1] == self.tokenizer.eos_token_id:
                 acceptance[batch, self.tokenizer.eos_token_id] = True
                 continue
-
-            for i, token in enumerate(nice_token_decodings):
-                prefix = "".join(decoded_token_list[batch]) + nice_token_decodings[i]
-                if self.string_grammar._accept_prefix(prefix):
-                    acceptance[batch, self.nice_token_ids_list[i]] = True
-                else:
-                    acceptance[batch, self.nice_token_ids_list[i]] = False
-                
-                if self.string_grammar._accept_string("".join(decoded_token_list[batch])):
-                    acceptance[batch, self.tokenizer.eos_token_id] = True
+            prefix = "".join(decoded_token_list[batch]) + self.tokenizer.decode(
+                [next_tokens[batch]], skip_special_tokens=True
+            )
+            if self.string_grammar._accept_prefix(prefix):
+                acceptance[batch, next_tokens[batch]] = True
+                continue
+            # if the prefix is not accepted, we need to check all nice token decodings
+            else:
+                for i, token in enumerate(nice_token_decodings):
+                    prefix = "".join(decoded_token_list[batch]) + nice_token_decodings[i]
+                    if self.string_grammar._accept_prefix(prefix):
+                        acceptance[batch, self.nice_token_ids_list[i]] = True
+                    else:
+                        acceptance[batch, self.nice_token_ids_list[i]] = False
+                    
+                    if self.string_grammar._accept_string("".join(decoded_token_list[batch])):
+                        if self.string_grammar._accept_string(nice_token_decodings[i]):
+                            acceptance[batch, self.nice_token_ids_list[i]] = True
                     
             # confilt with min_length constraint before, we don't this anymore
-            # if acceptance[batch].sum() == 1:
-            #     # This is a hacked version to make sure training can continue
-            #     # If CFG only accept one token (eos), we regard all tokens are acceptable
-            #     acceptance[batch, :] = True
+            if acceptance[batch].sum() == 0:
+                # This is a hacked version to make sure training can continue
+                # If CFG only accept one token (eos), we regard all tokens are acceptable
+                acceptance[batch, self.tokenizer.eos_token_id] = True
         # if the logits size of the model is more than the tokennizer vocab
         # we artificially expand the acceptance tensor and block everything
         # beyond the tokenizer vocab size
@@ -224,9 +239,12 @@ class GrammarIncrementalLogitsProcessorGeneral(LogitsProcessor):
         # Logits to -inf where False
         masked_logits[~acceptance] = -math.inf
         return masked_logits, acceptance
+    
+    def set_return_dict(self, return_dict: bool):
+        self.return_dict = return_dict
 
     def process_logits(
-        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, prompt_length: int = 0
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor
     ) -> torch.FloatTensor:
         """
         :param input_ids:
@@ -237,13 +255,19 @@ class GrammarIncrementalLogitsProcessorGeneral(LogitsProcessor):
             device = scores.device
         self.current_prefix = ["" for _ in range(input_ids.shape[0])]
 
-        masked_scores, acceptance = self.mask_logits(input_ids, scores, device, prompt_length)
-        return {"masked_logits": masked_scores, "acceptance": acceptance}
+        masked_scores, acceptance = self.mask_logits(input_ids, scores, device)
+        if self.return_dict:
+            return {"masked_logits": masked_scores, "acceptance": acceptance}
+        else:
+            return masked_scores
+        
+    def reset(self):
+        pass
 
     def __call__(
-        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, prompt_length: int = 0
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor
     ) -> torch.FloatTensor:
-        return self.process_logits(input_ids, scores, prompt_length)
+        return self.process_logits(input_ids, scores)
 
 
 class GrammarLogitsProcessorPartheseness(LogitsProcessor):
@@ -276,6 +300,9 @@ class GrammarLogitsProcessorPartheseness(LogitsProcessor):
         self.max_batch_size = max_batch_size
         self.return_dict = return_dict
         self.generate_idx_list(self.max_batch_size)
+
+    def set_return_dict(self, return_dict: bool):
+        self.return_dict = return_dict
 
     def mask_logits(
         self,
@@ -323,10 +350,14 @@ class GrammarLogitsProcessorPartheseness(LogitsProcessor):
                 else:
                     acceptance[batch, self.nice_token_ids_list[i]] = False
 
-            # if acceptance[batch].sum() == 1:
-            #     # This is a hacked version to make sure training can continue
-            #     # If CFG only accept one token (eos), we regard all tokens are acceptable
-            #     import ipdb; ipdb.set_trace()
+                if self.string_grammar._accept_string(prefix):
+                    acceptance[batch, self.tokenizer.eos_token_id] = True 
+
+            if acceptance[batch].sum() == 0:
+                # This is a hacked version to make sure training can continue
+                # If CFG only accept one token (eos), we regard all tokens are acceptable
+                acceptance[batch, self.tokenizer.eos_token_id] = True
+            
         # if the logits size of the model is more than the tokennizer vocab
         # we artificially expand the acceptance tensor and block everything
         # beyond the tokenizer vocab size
@@ -382,9 +413,9 @@ class GrammarLogitsProcessorPartheseness(LogitsProcessor):
         self.generate_idx_list(self.max_batch_size)
 
     def __call__(
-        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, prompt_length: Optional[int] = -0
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor
     ) -> torch.FloatTensor:
-        return self.process_logits(input_ids, scores, prompt_length)
+        return self.process_logits(input_ids, scores)
 
 
 class GrammarIncrementalLogitsProcessorForNumberOnly(LogitsProcessor):
@@ -412,13 +443,16 @@ class GrammarIncrementalLogitsProcessorForNumberOnly(LogitsProcessor):
         self.string_grammar = StringRecognizer(
             parsed_grammar.grammar_encoding, parsed_grammar.symbol_table["root"]
         )
+        self.prompt_length = -1
+
+    def set_prompt_length(self, prompt_length: int):
+        self.prompt_length = prompt_length
 
     def mask_logits(
         self,
         input_ids: torch.LongTensor,
         logits: torch.FloatTensor,
         device: torch.device,
-        prompt_length: int = 0,
     ) -> torch.FloatTensor:
         masked_logits = logits.clone()
         # logits: B,L,D
@@ -432,7 +466,7 @@ class GrammarIncrementalLogitsProcessorForNumberOnly(LogitsProcessor):
         decoded_token_list = [
             ",".join(self.tokenizer.decode(token_id) for token_id in token_list)
             + ("," if token_list else "")
-            for token_list in input_ids[:, prompt_length:].tolist()
+            for token_list in input_ids[:, self.prompt_length:].tolist()
         ]
 
         # Precompute decoding for tokens in nice_token_ids_list to avoid redundant decoding inside the loop
@@ -475,9 +509,12 @@ class GrammarIncrementalLogitsProcessorForNumberOnly(LogitsProcessor):
         # Logits to -inf where False
         masked_logits[~acceptance] = -math.inf
         return masked_logits, acceptance
+    
+    def set_return_dict(self, return_dict: bool):
+        self.return_dict = return_dict
 
     def process_logits(
-        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, prompt_length: int = 0
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor
     ) -> torch.FloatTensor:
         """
         :param input_ids:
@@ -488,13 +525,20 @@ class GrammarIncrementalLogitsProcessorForNumberOnly(LogitsProcessor):
             device = scores.device
         self.current_prefix = ["" for _ in range(input_ids.shape[0])]
 
-        masked_scores, acceptance = self.mask_logits(input_ids, scores, device, prompt_length)
-        return {"masked_logits": masked_scores, "acceptance": acceptance}
+        masked_scores, acceptance = self.mask_logits(input_ids, scores, device)
+
+        if self.return_dict:
+            return {
+                "masked_logits": masked_scores,
+                "acceptance": acceptance,
+            }
+        else:
+            return masked_scores
 
     def __call__(
-        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, prompt_length: int = 0
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor
     ) -> torch.FloatTensor:
-        return self.process_logits(input_ids, scores, prompt_length)
+        return self.process_logits(input_ids, scores)
 
 
 class GrammarConstrainedLogitsProcessor(LogitsProcessor):
