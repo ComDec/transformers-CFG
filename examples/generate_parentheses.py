@@ -1,12 +1,7 @@
-import torch
 import argparse
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
-from transformers_cfg.recognizer import StringRecognizer
-from transformers_cfg.generation.logits_process import GrammarConstrainedLogitsProcessor, GrammarLogitsProcessorPartheseness
-from transformers_cfg.parser import parse_ebnf
 import time
 
+import torch
 from chemgfn.utils.gfn_utils import (
     base_to_lora,
     generate_and_return_termination_logprob,
@@ -15,6 +10,16 @@ from chemgfn.utils.gfn_utils import (
     modified_subtb_loss,
     prepare_token_mask,
 )
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from transformers_cfg.generation.logits_process import (
+    GrammarConstrainedLogitsProcessor,
+    GrammarLogitsProcessorPartheseness,
+)
+from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
+from transformers_cfg.parser import parse_ebnf
+from transformers_cfg.recognizer import StringRecognizer
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Generate Parentheses strings")
@@ -40,9 +45,7 @@ if __name__ == "__main__":
     model_id = args.model_id
 
     # Detect if GPU is available, otherwise use CPU
-    device = torch.device(
-        args.device or ("cuda:0" if torch.cuda.is_available() else "cpu")
-    )
+    device = torch.device(args.device or ("cuda:0" if torch.cuda.is_available() else "cpu"))
     print(f"Using device: {device}")
 
     # Load model and tokenizer
@@ -53,12 +56,14 @@ if __name__ == "__main__":
     model = AutoModelForCausalLM.from_pretrained(model_id).to(device)
     model = model.to(torch.bfloat16)
 
-     # Generate
-    prefix1 = """This is a string with properly balanced parentheses, brackets, and angle brackets:"""
+    # Generate
+    prefix1 = (
+        """This is a string with properly balanced parentheses, brackets, and angle brackets:"""
+    )
 
-    input_ids = tokenizer(
-        [prefix1], add_special_tokens=False, return_tensors="pt", padding=True
-    )["input_ids"].to(
+    input_ids = tokenizer([prefix1], add_special_tokens=False, return_tensors="pt", padding=True)[
+        "input_ids"
+    ].to(
         device
     )  # Move input_ids to the same device as model
 
@@ -67,7 +72,9 @@ if __name__ == "__main__":
 
     # Load grammar
     grammar_name = args.parentheses_type
-    with open(f"/home/xw3763/project/gflow/ChemGFN/assets/parentheses_grammars/{grammar_name}.ebnf", "r") as file:
+    with open(
+        f"/home/xw3763/project/gflow/ChemGFN/assets/parentheses_grammars/{grammar_name}.ebnf"
+    ) as file:
         grammar_str = file.read()
 
     parsed_grammar = parse_ebnf(grammar_str)
@@ -77,21 +84,22 @@ if __name__ == "__main__":
     grammar = IncrementalGrammarConstraint(grammar_str, "root", tokenizer)
 
     (
-                legal_tokens_mask,
-                illegal_tokens_mask,
-                legal_token_ids_list,
-            ) = prepare_token_mask(tokenizer, "/home/xw3763/project/gflow/ChemGFN/assets/token_list/parentheses/allowed_gpt2_token")
+        legal_tokens_mask,
+        illegal_tokens_mask,
+        legal_token_ids_list,
+    ) = prepare_token_mask(
+        tokenizer,
+        "/home/xw3763/project/gflow/ChemGFN/assets/token_list/parentheses/allowed_gpt2_token",
+    )
 
     grammar_processor = GrammarLogitsProcessorPartheseness(
-                    parsed_grammar,
-                    tokenizer=tokenizer,
-                    nice_token_ids_list=legal_token_ids_list,
-                    return_dict=False,
-                )
+        parsed_grammar,
+        tokenizer=tokenizer,
+        nice_token_ids_list=legal_token_ids_list,
+        return_dict=False,
+    )
 
     grammar_processor.set_prompt_length(prompt_length)
-
-   
 
     max_new_tokens = 20
     # unconstrained_output = model.generate(
@@ -108,11 +116,9 @@ if __name__ == "__main__":
     from tqdm import tqdm
 
     with open("cfg-only-untrained.txt", "w+") as f:
-
         for _ in tqdm(range(10000)):
-
             grammar_processor.reset()
-            
+
             constrained_output = model.generate(
                 input_ids,
                 do_sample=True,
@@ -132,6 +138,3 @@ if __name__ == "__main__":
             sequences.append(decoded)
 
             f.write(decoded + "\n")
-    
-
-    
