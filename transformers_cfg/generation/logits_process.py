@@ -319,7 +319,7 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
         acceptance = torch.zeros((batch_size, self.vocab_size), dtype=torch.bool, device=device)
 
         eos_id = self.tokenizer.eos_token_id
-        acceptance[:, eos_id] = True
+        acceptance[:, eos_id] = False
 
         prompt_offset = self.prompt_length if self.prompt_length >= 0 else 0
         decoded_prefixes = [
@@ -329,10 +329,23 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
 
         base_acceptances = self._bulk_accept_string(decoded_prefixes)
 
+        # if we didn't reach min_length, we cannot accept eos, drop eos probability and argmax again
         next_token_ids = torch.argmax(logits, dim=-1).tolist()
+        for batch_idx in range(batch_size):
+            if (input_ids.shape[1] - self.prompt_length) < min_length and next_token_ids[
+                batch_idx
+            ] == eos_id:
+                logits[batch_idx, eos_id] = -torch.inf
+                next_token_ids[batch_idx] = torch.argmax(logits[batch_idx]).item()
+                if next_token_ids[batch_idx] == eos_id:
+                    # if still eos, we randomly pick one token from nice tokens
+                    if self._nice_token_pairs:
+                        next_token_ids[batch_idx] = torch.random.choice(self._nice_token_pairs)[0]
+
         next_token_decodings = [
             self._decoder.decode_token(token_id) for token_id in next_token_ids
         ]
+
         greedy_prefixes = [
             prefix + next_dec for prefix, next_dec in zip(decoded_prefixes, next_token_decodings)
         ]
@@ -394,6 +407,7 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
             # This is a hacked version to make sure training can continue
             # If CFG only accept one token (eos), we regard all tokens are acceptable
             # acceptance[batch, self.tokenizer.eos_token_id] = True
+
         # if the logits size of the model is more than the tokennizer vocab
         # we artificially expand the acceptance tensor and block everything
         # beyond the tokenizer vocab size
@@ -411,8 +425,15 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
             )
             acceptance = torch.cat((acceptance, false_tensor), dim=-1)
 
+        # sanity check
+        for batch_idx in range(batch_size):
+            if ((input_ids.shape[1] - self.prompt_length) < min_length) and (
+                acceptance[batch_idx, eos_id] == True
+            ):
+                acceptance[batch_idx, eos_id] = False
+
         # Logits to -inf where False
-        masked_logits = logits.masked_fill(~acceptance, -math.inf)
+        masked_logits = logits.masked_fill(~acceptance, -torch.inf)
         return masked_logits, acceptance
 
 
@@ -726,6 +747,7 @@ class GrammarIncrementalLogitsProcessorForNumberOnly(_TokenCacheMixin, LogitsPro
         execution_mode: Literal["full", "limited"] = "limited",
     ) -> None:
         self.device = device
+        self.return_dict = False
         self._init_token_cache(tokenizer, nice_token_ids_list)
         self.execution_mode = execution_mode
         self._set_string_grammar(
