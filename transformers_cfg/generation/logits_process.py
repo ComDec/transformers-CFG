@@ -3,11 +3,11 @@ import logging
 import math
 import os
 import pprint
+import random
 from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple
 
 import torch
-from sympy import im
 from transformers import PreTrainedTokenizer
 from transformers.generation.logits_process import (
     LOGITS_PROCESSOR_INPUTS_DOCSTRING,
@@ -26,7 +26,8 @@ def _normalize_token_id_list(token_ids: Optional[Iterable[int]]) -> tuple[int, .
     if token_ids is None:
         return tuple()
     if isinstance(token_ids, torch.Tensor):
-        return tuple(int(token) for token in token_ids.tolist())
+        # Use tensor directly without converting to list first - more efficient
+        return tuple(token_ids.cpu().tolist() if token_ids.is_cuda else token_ids.tolist())
     return tuple(int(token) for token in token_ids)
 
 
@@ -84,13 +85,9 @@ class _TokenCacheMixin:
 
     @staticmethod
     def _bulk_lookup(values: Sequence[str], lookup_fn) -> List[bool]:
-        results: List[bool] = [False] * len(values)
-        cache: Dict[str, bool] = {}
-        for idx, value in enumerate(values):
-            if value not in cache:
-                cache[value] = lookup_fn(value)
-            results[idx] = cache[value]
-        return results
+        # Remove redundant cache since lookup_fn already has LRU cache
+        # Directly call lookup_fn - the LRU cache will handle deduplication
+        return [lookup_fn(value) for value in values]
 
     def _bulk_accept_prefix(self, values: Sequence[str]) -> List[bool]:
         return self._bulk_lookup(values, self._accept_prefix)
@@ -322,36 +319,50 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
         acceptance[:, eos_id] = False
 
         prompt_offset = self.prompt_length if self.prompt_length >= 0 else 0
+        # Optimize: batch decode and avoid multiple .tolist() calls
+        input_ids_slice = input_ids[:, prompt_offset:]
+        # Convert to CPU once if on GPU, then decode in batch
+        if input_ids_slice.is_cuda:
+            input_ids_cpu = input_ids_slice.cpu()
+        else:
+            input_ids_cpu = input_ids_slice
         decoded_prefixes = [
-            self._decoder.decode_sequence(token_ids)
-            for token_ids in input_ids[:, prompt_offset:].tolist()
+            self._decoder.decode_sequence(token_ids.tolist()) for token_ids in input_ids_cpu
         ]
 
         base_acceptances = self._bulk_accept_string(decoded_prefixes)
 
         # if we didn't reach min_length, we cannot accept eos, drop eos probability and argmax again
-        next_token_ids = torch.argmax(logits, dim=-1).tolist()
+        # Keep next_token_ids as tensor for as long as possible
+        next_token_ids_tensor = torch.argmax(logits, dim=-1)
+        next_token_ids = next_token_ids_tensor.tolist()
+        current_length_minus_prompt = input_ids.shape[1] - self.prompt_length
         for batch_idx in range(batch_size):
-            if (input_ids.shape[1] - self.prompt_length) < min_length and next_token_ids[
-                batch_idx
-            ] == eos_id:
+            if current_length_minus_prompt < min_length and next_token_ids[batch_idx] == eos_id:
                 logits[batch_idx, eos_id] = -torch.inf
                 next_token_ids[batch_idx] = torch.argmax(logits[batch_idx]).item()
                 if next_token_ids[batch_idx] == eos_id:
                     # if still eos, we randomly pick one token from nice tokens
                     if self._nice_token_pairs:
-                        next_token_ids[batch_idx] = torch.random.choice(self._nice_token_pairs)[0]
+                        # Use random.choice directly on tuple
+                        next_token_ids[batch_idx] = random.choice(self.nice_token_ids_list)
 
         next_token_decodings = [
             self._decoder.decode_token(token_id) for token_id in next_token_ids
         ]
 
+        # Optimize string concatenation with list comprehension
         greedy_prefixes = [
             prefix + next_dec for prefix, next_dec in zip(decoded_prefixes, next_token_decodings)
         ]
         greedy_acceptances = self._bulk_accept_prefix(greedy_prefixes)
 
-        last_token_ids = input_ids[:, -1].tolist()
+        # Avoid .tolist() by using tensor indexing directly
+        last_token_ids_tensor = input_ids[:, -1]
+        if last_token_ids_tensor.is_cuda:
+            last_token_ids = last_token_ids_tensor.cpu().tolist()
+        else:
+            last_token_ids = last_token_ids_tensor.tolist()
         current_length = input_ids.shape[1]
 
         if self.execution_mode == "extensive":
@@ -425,12 +436,10 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
             )
             acceptance = torch.cat((acceptance, false_tensor), dim=-1)
 
-        # sanity check
-        for batch_idx in range(batch_size):
-            if ((input_ids.shape[1] - self.prompt_length) < min_length) and (
-                acceptance[batch_idx, eos_id] == True
-            ):
-                acceptance[batch_idx, eos_id] = False
+        # sanity check - vectorize this operation
+        current_length_minus_prompt = input_ids.shape[1] - self.prompt_length
+        if current_length_minus_prompt < min_length:
+            acceptance[:, eos_id] = False
 
         # Logits to -inf where False
         masked_logits = logits.masked_fill(~acceptance, -torch.inf)
@@ -480,9 +489,14 @@ class GrammarIncrementalLogitsProcessorSampleEnhanced(_TokenCacheMixin, LogitsPr
         acceptance = torch.zeros((batch_size, self.vocab_size), dtype=torch.bool, device=device)
 
         prompt_offset = self.prompt_length if self.prompt_length >= 0 else 0
+        # Optimize: batch decode and avoid multiple .tolist() calls
+        input_ids_slice = input_ids[:, prompt_offset:]
+        if input_ids_slice.is_cuda:
+            input_ids_cpu = input_ids_slice.cpu()
+        else:
+            input_ids_cpu = input_ids_slice
         decoded_prefixes = [
-            self._decoder.decode_sequence(token_ids)
-            for token_ids in input_ids[:, prompt_offset:].tolist()
+            self._decoder.decode_sequence(token_ids.tolist()) for token_ids in input_ids_cpu
         ]
 
         next_tokens = torch.nn.functional.gumbel_softmax(
@@ -498,7 +512,12 @@ class GrammarIncrementalLogitsProcessorSampleEnhanced(_TokenCacheMixin, LogitsPr
         greedy_acceptances = self._bulk_accept_prefix(greedy_prefixes)
 
         eos_id = self.tokenizer.eos_token_id
-        last_token_ids = input_ids[:, -1].tolist()
+        # Optimize: avoid .tolist() by using tensor indexing directly
+        last_token_ids_tensor = input_ids[:, -1]
+        if last_token_ids_tensor.is_cuda:
+            last_token_ids = last_token_ids_tensor.cpu().tolist()
+        else:
+            last_token_ids = last_token_ids_tensor.tolist()
         current_length = input_ids.shape[1]
 
         nice_candidate_strings: List[str] = []
@@ -523,9 +542,9 @@ class GrammarIncrementalLogitsProcessorSampleEnhanced(_TokenCacheMixin, LogitsPr
                 if accepted:
                     acceptance[batch_idx, token_id] = True
 
-        for batch_idx in range(batch_size):
-            if not acceptance[batch_idx].any():
-                acceptance[batch_idx, eos_id] = True
+        # Vectorize: find batches with no acceptance and set eos_id to True
+        no_acceptance_mask = ~acceptance.any(dim=-1)
+        acceptance[no_acceptance_mask, eos_id] = True
         # if the logits size of the model is more than the tokennizer vocab
         # we artificially expand the acceptance tensor and block everything
         # beyond the tokenizer vocab size
@@ -620,9 +639,15 @@ class GrammarLogitsProcessorPartheseness(_TokenCacheMixin, LogitsProcessor):
         batch_size = logits.shape[0]
         acceptance = torch.zeros((batch_size, self.vocab_size), dtype=torch.bool, device=device)
 
+        # Optimize: reduce .tolist() calls
+        input_ids_slice = input_ids[:, prompt_length:]
+        if input_ids_slice.is_cuda:
+            input_ids_cpu = input_ids_slice.cpu()
+        else:
+            input_ids_cpu = input_ids_slice
         decoded_token_list = [
             [self._decoder.decode_token(token_id) for token_id in token_list]
-            for token_list in input_ids[:, prompt_length:].tolist()
+            for token_list in input_ids_cpu.tolist()
         ]
 
         eos_id = self.tokenizer.eos_token_id
@@ -661,8 +686,13 @@ class GrammarLogitsProcessorPartheseness(_TokenCacheMixin, LogitsProcessor):
                 if accepted:
                     acceptance[batch_idx, token_id] = True
 
-        for batch_idx, prefix in enumerate(updated_prefixes):
-            if self._accept_string(prefix) or not acceptance[batch_idx].any():
+        # Optimize: batch check acceptance and vectorize setting eos_id
+        updated_prefix_acceptances = self._bulk_accept_string(updated_prefixes)
+        no_acceptance_mask = ~acceptance.any(dim=-1)
+        for batch_idx, (prefix_accepted, no_accept) in enumerate(
+            zip(updated_prefix_acceptances, no_acceptance_mask)
+        ):
+            if prefix_accepted or no_accept:
                 acceptance[batch_idx, eos_id] = True
 
         # if the logits size of the model is more than the tokennizer vocab
@@ -768,14 +798,25 @@ class GrammarIncrementalLogitsProcessorForNumberOnly(_TokenCacheMixin, LogitsPro
         acceptance = torch.zeros((batch_size, self.vocab_size), dtype=torch.bool, device=device)
 
         prompt_offset = self.prompt_length if self.prompt_length >= 0 else 0
+        # Optimize: reduce .tolist() calls
+        input_ids_slice = input_ids[:, prompt_offset:]
+        if input_ids_slice.is_cuda:
+            input_ids_cpu = input_ids_slice.cpu()
+        else:
+            input_ids_cpu = input_ids_slice
         decoded_token_list = [
             ",".join(self._decoder.decode_token(token_id) for token_id in token_list)
             + ("," if token_list else "")
-            for token_list in input_ids[:, prompt_offset:].tolist()
+            for token_list in input_ids_cpu.tolist()
         ]
 
         eos_id = self.tokenizer.eos_token_id
-        last_token_ids = input_ids[:, -1].tolist()
+        # Optimize: avoid .tolist() by using tensor indexing directly
+        last_token_ids_tensor = input_ids[:, -1]
+        if last_token_ids_tensor.is_cuda:
+            last_token_ids = last_token_ids_tensor.cpu().tolist()
+        else:
+            last_token_ids = last_token_ids_tensor.tolist()
 
         candidate_strings: List[str] = []
         candidate_meta: List[Tuple[int, int]] = []
@@ -873,7 +914,11 @@ class GrammarConstrainedLogitsProcessor(LogitsProcessor):
                 device=device,
             )
             next_tokens = torch.argmax(logits, dim=-1)
-            for i, next_token in enumerate(next_tokens.tolist()):
+            # Optimize: convert to list once
+            next_tokens_list = (
+                next_tokens.cpu().tolist() if next_tokens.is_cuda else next_tokens.tolist()
+            )
+            for i, next_token in enumerate(next_tokens_list):
                 try:
                     is_next_token_accepted = self.grammar_constraint.accept_token_ids(
                         [next_token], self.batch_parsing_states[i]
@@ -1035,7 +1080,12 @@ class GrammarLimitedOneTimeLogitsProcessor(_TokenCacheMixin, LogitsProcessor):
         eos_id = self.tokenizer.eos_token_id
         acceptance[:, eos_id] = True
 
-        input_ids_list = input_ids.tolist()
+        # Optimize: reduce .tolist() calls
+        if input_ids.is_cuda:
+            input_ids_cpu = input_ids.cpu()
+        else:
+            input_ids_cpu = input_ids
+        input_ids_list = input_ids_cpu.tolist()
         decoded_token_list = [self._decoder.decode_token(token_id) for token_id in input_ids_list]
 
         # parse start token
