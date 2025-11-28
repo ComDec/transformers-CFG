@@ -238,6 +238,7 @@ class BaseGrammarLogitsProcessor(LogitsProcessor):
 
     def __init__(self) -> None:
         self.device = None
+        self.return_dict = True
 
     def set_return_dict(self, return_dict: bool):
         self.return_dict = return_dict
@@ -269,9 +270,19 @@ class BaseGrammarLogitsProcessor(LogitsProcessor):
         pass
 
     def __call__(
-        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, min_length: int = 0
+        self,
+        input_ids: torch.LongTensor,
+        scores: torch.FloatTensor,
+        min_length: int = 0,
+        disable_grammar: bool = False,
     ) -> torch.FloatTensor:
-        return self.process_logits(input_ids, scores, min_length)
+        if disable_grammar:
+            return {
+                "masked_logits": scores,
+                "acceptance": torch.ones_like(scores, dtype=torch.bool),
+            }
+        else:
+            return self.process_logits(input_ids, scores, min_length)
 
 
 class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogitsProcessor):
@@ -366,7 +377,9 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
         current_length = input_ids.shape[1]
 
         if self.execution_mode == "extensive":
-            all_token_decodings = self._ensure_all_token_decodings()
+            all_token_decodings = [
+                (x, self._decoder.decode_token(x)) for x in self.nice_token_ids_list
+            ]
         else:
             all_token_decodings = None
 
@@ -384,8 +397,11 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
 
             if greedy_acceptances[batch_idx]:
                 acceptance[batch_idx, next_token_ids[batch_idx]] = True
-                if limited_mode:
-                    continue
+
+                # Although greedy acceptance is True, we still need to check the other conditions
+
+                # if limited_mode:
+                #     continue
 
             if last_token_ids[batch_idx] == eos_id and current_length >= min_length:
                 acceptance[batch_idx, eos_id] = True

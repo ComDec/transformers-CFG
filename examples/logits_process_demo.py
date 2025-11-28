@@ -263,13 +263,16 @@ def run_demo() -> None:
         execution_mode="full",
     )
 
+    seq_ids_flat = seq_ids.squeeze(0)
+    seq_scores = torch.zeros((seq_ids_flat.size(0), vocab))
+
     summarize_processor(
         name="GrammarLimitedOneTimeLogitsProcessor",
         processor=number_proc,
         tokenizer=tokenizer,
-        input_ids=seq_ids,
-        scores=dummy_scores,
-        ignore_length=seq_ids.size(1),
+        input_ids=seq_ids_flat,
+        scores=seq_scores,
+        ignore_length=seq_ids_flat.size(0),
     )
 
     # --------------------------- Constraint wrapper ------------------------

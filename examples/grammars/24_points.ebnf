@@ -1,0 +1,4 @@
+root  ::= expr
+expr  ::= term ([-+*/]term)*
+term  ::= num | "("expr")"
+num   ::= [0-9]+
