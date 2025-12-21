@@ -1,4 +1,4 @@
-root  ::= expr
-expr  ::= term ([-+*/]term)*
-term  ::= num | "("expr")"
-num   ::= [0-9]+
+root  ::= expr4
+expr4 ::= num op num op num op num
+op    ::= "+" | "-" | "*" | "/"
+num   ::= [0-9]

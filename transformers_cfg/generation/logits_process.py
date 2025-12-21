@@ -288,11 +288,14 @@ class BaseGrammarLogitsProcessor(LogitsProcessor):
 class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogitsProcessor):
     """
     This logits processor is used to limit the tokens that can be generated.
-    It is used to generate a single token at a time.
-    This is a special case for number only with the following exception:
-    - The decoded token is a number only, not a number with comma. Without comma, it's very hard to tell the validation of number.
-        e.g. "123" in accepted, but it can be "1,23" or "12,3" or "123,".
-    - The generated token_ids will connected with comma automatically.
+    We provide three execution modes:
+    - greedy: only check and accept the most likely token, but the next token is invalid, we will fallback to limited mode
+    - limited: only check and accept the tokens in the nice_token_ids_list
+    - extensive: check and accept all tokens
+
+    Return Dictionary containing:
+    - masked_logits: the logits after masked, shape: (batch_size, vocab_size)
+    - acceptance: the acceptance of the tokens, shape: (batch_size, vocab_size)
     """
 
     def __init__(
@@ -301,7 +304,7 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
         tokenizer: PreTrainedTokenizer,
         device: Optional[torch.device] = None,
         nice_token_ids_list: Optional[torch.tensor] = None,
-        execution_mode: Literal["full", "limited"] = "limited",
+        execution_mode: Literal["greedy", "limited", "extensive"] = "limited",
     ) -> None:
         super().__init__()
         self.device = device
@@ -310,8 +313,42 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
         self._set_string_grammar(
             StringRecognizer(parsed_grammar.grammar_encoding, parsed_grammar.symbol_table["root"])
         )
+        self.eos_id = tokenizer.eos_token_id
+        if self._nice_token_pairs:
+            filtered_ids = []
+            filtered_decodings = []
+            for token_id, token_str in self._nice_token_pairs:
+                if self.eos_id is not None and token_id == self.eos_id:
+                    continue
+                filtered_ids.append(token_id)
+                filtered_decodings.append(token_str)
+            self._nice_token_ids_no_eos = tuple(filtered_ids)
+            self._nice_token_decodings_no_eos = tuple(filtered_decodings)
+        else:
+            self._nice_token_ids_no_eos = ()
+            self._nice_token_decodings_no_eos = ()
+        self._all_token_ids_no_eos: Optional[Tuple[int, ...]] = None
+        self._all_token_decodings_no_eos: Optional[Tuple[str, ...]] = None
         self.prompt_length = 0
         self.return_dict = True
+
+    def _ensure_all_token_lists_no_eos(self) -> Tuple[Tuple[int, ...], Tuple[str, ...]]:
+        if self._all_token_ids_no_eos is None or self._all_token_decodings_no_eos is None:
+            token_decodings = self._ensure_all_token_decodings()
+            if self.eos_id is None:
+                self._all_token_ids_no_eos = tuple(range(self.vocab_size))
+                self._all_token_decodings_no_eos = tuple(token_decodings)
+            else:
+                ids: List[int] = []
+                decodings: List[str] = []
+                for token_id, token_str in enumerate(token_decodings):
+                    if token_id == self.eos_id:
+                        continue
+                    ids.append(token_id)
+                    decodings.append(token_str)
+                self._all_token_ids_no_eos = tuple(ids)
+                self._all_token_decodings_no_eos = tuple(decodings)
+        return self._all_token_ids_no_eos, self._all_token_decodings_no_eos
 
     def set_prompt_length(self, prompt_length: int):
         self.prompt_length = prompt_length
@@ -326,8 +363,9 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
         batch_size = logits.shape[0]
         acceptance = torch.zeros((batch_size, self.vocab_size), dtype=torch.bool, device=device)
 
-        eos_id = self.tokenizer.eos_token_id
-        acceptance[:, eos_id] = False
+        eos_id = self.eos_id
+        if eos_id is not None:
+            acceptance[:, eos_id] = False
 
         prompt_offset = self.prompt_length if self.prompt_length >= 0 else 0
         # Optimize: batch decode and avoid multiple .tolist() calls
@@ -342,31 +380,52 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
         ]
 
         base_acceptances = self._bulk_accept_string(decoded_prefixes)
+        if eos_id is not None:
+            base_acceptances_tensor = torch.tensor(
+                base_acceptances, dtype=torch.bool, device=device
+            )
+            # EOS ends the sequence, so we use accept_string on the current prefix.
+            acceptance[:, eos_id] = base_acceptances_tensor
 
         # if we didn't reach min_length, we cannot accept eos, drop eos probability and argmax again
         # Keep next_token_ids as tensor for as long as possible
+        current_length_minus_prompt = input_ids.shape[1] - prompt_offset
+        if eos_id is not None and current_length_minus_prompt < min_length:
+            logits[:, eos_id] = -torch.inf
         next_token_ids_tensor = torch.argmax(logits, dim=-1)
+        if (
+            eos_id is not None
+            and current_length_minus_prompt < min_length
+            and self._nice_token_pairs
+        ):
+            still_eos_mask = next_token_ids_tensor == eos_id
+            if still_eos_mask.any():
+                still_eos_indices = still_eos_mask.nonzero(as_tuple=False).view(-1).tolist()
+                replacement_pool = (
+                    self._nice_token_ids_no_eos
+                    if self._nice_token_ids_no_eos
+                    else self.nice_token_ids_list
+                )
+                replacements = random.choices(replacement_pool, k=len(still_eos_indices))
+                for idx, replacement in zip(still_eos_indices, replacements):
+                    next_token_ids_tensor[idx] = int(replacement)
         next_token_ids = next_token_ids_tensor.tolist()
-        current_length_minus_prompt = input_ids.shape[1] - self.prompt_length
-        for batch_idx in range(batch_size):
-            if current_length_minus_prompt < min_length and next_token_ids[batch_idx] == eos_id:
-                logits[batch_idx, eos_id] = -torch.inf
-                next_token_ids[batch_idx] = torch.argmax(logits[batch_idx]).item()
-                if next_token_ids[batch_idx] == eos_id:
-                    # if still eos, we randomly pick one token from nice tokens
-                    if self._nice_token_pairs:
-                        # Use random.choice directly on tuple
-                        next_token_ids[batch_idx] = random.choice(self.nice_token_ids_list)
 
-        next_token_decodings = [
-            self._decoder.decode_token(token_id) for token_id in next_token_ids
-        ]
+        greedy_acceptances = [False for _ in range(batch_size)]
+        greedy_candidate_strings: List[str] = []
+        greedy_candidate_meta: List[int] = []
+        for batch_idx, (base_prefix, token_id) in enumerate(zip(decoded_prefixes, next_token_ids)):
+            if eos_id is not None and token_id == eos_id:
+                greedy_acceptances[batch_idx] = base_acceptances[batch_idx]
+                continue
+            token_str = self._decoder.decode_token(token_id)
+            greedy_candidate_strings.append(base_prefix + token_str)
+            greedy_candidate_meta.append(batch_idx)
 
-        # Optimize string concatenation with list comprehension
-        greedy_prefixes = [
-            prefix + next_dec for prefix, next_dec in zip(decoded_prefixes, next_token_decodings)
-        ]
-        greedy_acceptances = self._bulk_accept_prefix(greedy_prefixes)
+        if greedy_candidate_strings:
+            greedy_results = self._bulk_accept_prefix(greedy_candidate_strings)
+            for batch_idx, accepted in zip(greedy_candidate_meta, greedy_results):
+                greedy_acceptances[batch_idx] = accepted
 
         # Avoid .tolist() by using tensor indexing directly
         last_token_ids_tensor = input_ids[:, -1]
@@ -376,59 +435,62 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
             last_token_ids = last_token_ids_tensor.tolist()
         current_length = input_ids.shape[1]
 
+        if any(greedy_acceptances):
+            greedy_acceptances_tensor = torch.tensor(
+                greedy_acceptances, dtype=torch.bool, device=device
+            )
+            batch_indices = torch.arange(batch_size, device=device)[greedy_acceptances_tensor]
+            token_indices = next_token_ids_tensor[greedy_acceptances_tensor]
+            acceptance[batch_indices, token_indices] = True
+
         if self.execution_mode == "extensive":
-            all_token_decodings = [
-                (x, self._decoder.decode_token(x)) for x in self.nice_token_ids_list
-            ]
+            candidate_token_ids, candidate_token_decodings = self._ensure_all_token_lists_no_eos()
         else:
-            all_token_decodings = None
+            candidate_token_ids = self._nice_token_ids_no_eos
+            candidate_token_decodings = self._nice_token_decodings_no_eos
 
-        limited_mode = self.execution_mode == "limited"
-        full_mode = self.execution_mode == "full"
-
-        nice_candidate_strings: List[str] = []
-        nice_candidate_meta: List[Tuple[int, int]] = []
-        extensive_candidate_strings: List[str] = []
-        extensive_candidate_meta: List[Tuple[int, int]] = []
-
+        candidate_strings: List[str] = []
+        search_batch_indices: List[int] = []
+        # Greedy mode falls back to limited search only when the top token is invalid.
+        greedy_fallback = self.execution_mode == "greedy"
         for batch_idx, base_prefix in enumerate(decoded_prefixes):
-            if base_acceptances[batch_idx]:
-                acceptance[batch_idx, eos_id] = True
-
-            if greedy_acceptances[batch_idx]:
-                acceptance[batch_idx, next_token_ids[batch_idx]] = True
-
-                # Although greedy acceptance is True, we still need to check the other conditions
-
-                # if limited_mode:
-                #     continue
-
-            if last_token_ids[batch_idx] == eos_id and current_length >= min_length:
-                acceptance[batch_idx, eos_id] = True
+            if eos_id is not None and last_token_ids[batch_idx] == eos_id:
+                if current_length >= min_length:
+                    acceptance[batch_idx, eos_id] = True
                 continue
 
-            if self.execution_mode in ("full", "limited") and self._nice_token_pairs:
-                for token_id, token_str in self._nice_token_pairs:
-                    nice_candidate_strings.append(base_prefix + token_str)
-                    nice_candidate_meta.append((batch_idx, token_id))
-            elif self.execution_mode == "extensive" and all_token_decodings is not None:
-                for token_id, token_str in enumerate(all_token_decodings):
-                    extensive_candidate_strings.append(base_prefix + token_str)
-                    extensive_candidate_meta.append((batch_idx, token_id))
+            if greedy_fallback and greedy_acceptances[batch_idx]:
+                continue
 
-        if nice_candidate_strings:
-            nice_results = self._bulk_accept_prefix(nice_candidate_strings)
-            for (batch_idx, token_id), accepted in zip(nice_candidate_meta, nice_results):
-                if accepted:
-                    acceptance[batch_idx, token_id] = True
+            if not candidate_token_ids:
+                continue
 
-        if extensive_candidate_strings:
-            extensive_results = self._bulk_accept_prefix(extensive_candidate_strings)
-            for (batch_idx, token_id), accepted in zip(
-                extensive_candidate_meta, extensive_results
-            ):
-                if accepted:
-                    acceptance[batch_idx, token_id] = True
+            search_batch_indices.append(batch_idx)
+            candidate_strings.extend(
+                base_prefix + token_str for token_str in candidate_token_decodings
+            )
+
+        if candidate_strings:
+            candidate_results = self._bulk_accept_prefix(candidate_strings)
+            token_count = len(candidate_token_ids)
+            if token_count and search_batch_indices:
+                if acceptance.is_cuda:
+                    results_tensor = torch.tensor(
+                        candidate_results, dtype=torch.bool, device=device
+                    ).view(len(search_batch_indices), token_count)
+                    batch_indices_tensor = torch.tensor(search_batch_indices, device=device)
+                    token_ids_tensor = torch.tensor(candidate_token_ids, device=device)
+                    acceptance[
+                        batch_indices_tensor.unsqueeze(1),
+                        token_ids_tensor,
+                    ] = results_tensor
+                else:
+                    offset = 0
+                    for batch_idx in search_batch_indices:
+                        for token_id in candidate_token_ids:
+                            if candidate_results[offset]:
+                                acceptance[batch_idx, token_id] = True
+                            offset += 1
             # confilt with min_length constraint before, we don't this anymore
             # if acceptance[batch].sum() == 0:
             # This is a hacked version to make sure training can continue
@@ -453,8 +515,7 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
             acceptance = torch.cat((acceptance, false_tensor), dim=-1)
 
         # sanity check - vectorize this operation
-        current_length_minus_prompt = input_ids.shape[1] - self.prompt_length
-        if current_length_minus_prompt < min_length:
+        if current_length_minus_prompt < min_length and eos_id is not None:
             acceptance[:, eos_id] = False
 
         # Logits to -inf where False
