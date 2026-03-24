@@ -390,6 +390,8 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
         # if we didn't reach min_length, we cannot accept eos, drop eos probability and argmax again
         # Keep next_token_ids as tensor for as long as possible
         current_length_minus_prompt = input_ids.shape[1] - prompt_offset
+        if eos_id is not None and current_length_minus_prompt == 0:
+            logits[:, eos_id] = -torch.inf
         if eos_id is not None and current_length_minus_prompt < min_length:
             logits[:, eos_id] = -torch.inf
         next_token_ids_tensor = torch.argmax(logits, dim=-1)
@@ -515,6 +517,8 @@ class GrammarIncrementalLogitsProcessorGeneral(_TokenCacheMixin, BaseGrammarLogi
             acceptance = torch.cat((acceptance, false_tensor), dim=-1)
 
         # sanity check - vectorize this operation
+        if current_length_minus_prompt == 0 and eos_id is not None:
+            acceptance[:, eos_id] = False
         if current_length_minus_prompt < min_length and eos_id is not None:
             acceptance[:, eos_id] = False
 
@@ -589,6 +593,7 @@ class GrammarIncrementalLogitsProcessorSampleEnhanced(_TokenCacheMixin, LogitsPr
         greedy_acceptances = self._bulk_accept_prefix(greedy_prefixes)
 
         eos_id = self.tokenizer.eos_token_id
+        current_length_minus_prompt = input_ids.shape[1] - prompt_offset
         # Optimize: avoid .tolist() by using tensor indexing directly
         last_token_ids_tensor = input_ids[:, -1]
         if last_token_ids_tensor.is_cuda:
@@ -622,6 +627,8 @@ class GrammarIncrementalLogitsProcessorSampleEnhanced(_TokenCacheMixin, LogitsPr
         # Vectorize: find batches with no acceptance and set eos_id to True
         no_acceptance_mask = ~acceptance.any(dim=-1)
         acceptance[no_acceptance_mask, eos_id] = True
+        if current_length_minus_prompt == 0:
+            acceptance[:, eos_id] = False
         # if the logits size of the model is more than the tokennizer vocab
         # we artificially expand the acceptance tensor and block everything
         # beyond the tokenizer vocab size
@@ -728,6 +735,7 @@ class GrammarLogitsProcessorPartheseness(_TokenCacheMixin, LogitsProcessor):
         ]
 
         eos_id = self.tokenizer.eos_token_id
+        current_length_minus_prompt = input_ids.shape[1] - prompt_length
 
         candidate_strings: List[str] = []
         candidate_meta: List[Tuple[int, int]] = []
@@ -771,6 +779,8 @@ class GrammarLogitsProcessorPartheseness(_TokenCacheMixin, LogitsProcessor):
         ):
             if prefix_accepted or no_accept:
                 acceptance[batch_idx, eos_id] = True
+        if current_length_minus_prompt == 0:
+            acceptance[:, eos_id] = False
 
         # if the logits size of the model is more than the tokennizer vocab
         # we artificially expand the acceptance tensor and block everything
@@ -888,6 +898,7 @@ class GrammarIncrementalLogitsProcessorForNumberOnly(_TokenCacheMixin, LogitsPro
         ]
 
         eos_id = self.tokenizer.eos_token_id
+        current_length_minus_prompt = input_ids.shape[1] - prompt_offset
         # Optimize: avoid .tolist() by using tensor indexing directly
         last_token_ids_tensor = input_ids[:, -1]
         if last_token_ids_tensor.is_cuda:
@@ -912,6 +923,8 @@ class GrammarIncrementalLogitsProcessorForNumberOnly(_TokenCacheMixin, LogitsPro
             for (batch_idx, token_id), accepted in zip(candidate_meta, candidate_results):
                 if accepted:
                     acceptance[batch_idx, token_id] = True
+        if current_length_minus_prompt == 0:
+            acceptance[:, eos_id] = False
         # if the logits size of the model is more than the tokennizer vocab
         # we artificially expand the acceptance tensor and block everything
         # beyond the tokenizer vocab size
